@@ -5,8 +5,11 @@ from pathlib import Path
 
 
 EXPECTED_TOOL_SURFACE = {
-    "search_prts": ("query", "limit"),
-    "read_prts_page": ("page_title",),
+    "search_prts": ("query", "limit", "search_mode", "filter_technical"),
+    "read_prts_page": ("page_title", "section_index"),
+    "list_prts_sections": ("page_title",),
+    "get_prts_categories": ("page_title",),
+    "get_prts_links": ("page_title", "direction", "limit"),
     "get_operator_archives": ("operator_name",),
     "get_operator_voicelines": ("operator_name",),
     "get_operator_basic_info": ("operator_name",),

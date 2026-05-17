@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-18
+
+### Added
+
+- **PRTS page table of contents.** `list_prts_sections(page_title)` returns the
+  section index for a wiki page.
+- **PRTS page categories.** `get_prts_categories(page_title)` returns category
+  tags for a wiki page.
+- **PRTS page links.** `get_prts_links(page_title, direction, limit)` returns
+  outbound links or inbound backlinks with pagination.
+
+### Changed
+
+- **`read_prts_page` gains `section_index` parameter.** Backwards-compatible.
+- **`search_prts` enhanced.** New `search_mode` (`text` / `title`),
+  `filter_technical` toggle, and `totalHits` in results. Backwards-compatible.
+
 ## [1.2.0] - 2026-05-14
 
 ### Added
