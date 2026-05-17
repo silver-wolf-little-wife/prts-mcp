@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-18
+
+### Added
+
+- **PRTS page table of contents.** `list_prts_sections(page_title)` returns the
+  section index for a wiki page. Each section is labeled with its index (e.g.
+  `[1]`, `[T-1]` for template-transcluded), heading level, and title.
+- **PRTS page categories.** `get_prts_categories(page_title)` returns the
+  category tags for a wiki page (e.g. "干员", "术师干员").
+- **PRTS page links.** `get_prts_links(page_title, direction, limit)` returns
+  outbound links from a page or inbound backlinks to a page, with pagination.
+
+### Changed
+
+- **`read_prts_page` gains `section_index` parameter.** When set, only the
+  specified section's plain-text content is returned instead of the full page.
+  Backwards-compatible: the parameter defaults to `None` (whole page).
+- **`search_prts` enhanced.** New `search_mode` parameter (`text` / `title`),
+  `filter_technical` toggle (default `true`, filters `/spine`, `/data`, etc.
+  technical pages), and `totalhits` count in search results. Backwards-compatible:
+  new parameters have safe defaults.
+
 ## [1.2.0] - 2026-05-14
 
 ### Added

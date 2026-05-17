@@ -1,14 +1,14 @@
 # PRTS-MCP Roadmap
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-05-18_
 
 PRTS-MCP has reached its first stable release. The public tool surface and
 data architecture are now under a compatibility contract.
 
 ## Current Release
 
-- Python: `1.2.0`
-- TypeScript: `1.2.0`
+- Python: `1.3.0`
+- TypeScript: `1.3.0`
 - The public tool surface (12 MCP tools) is frozen in the 1.x line.
   Automated CI checks enforce this.
 - 1.1.0 adds 3 search tools. 1.2.0 adds 2 story summary tools.
@@ -162,11 +162,38 @@ decisions yet; this section captures what's possible.
   LLM-generated long summaries (5~7:1 per-chapter, 10:1 per-event). Three-tier
   fallback ensures graceful degradation when LLM data is unavailable.
 
-## Next Feature: PRTS API Deep Integration
+## 1.3.0: PRTS API Deep Integration
 
-See the [1.2.0 PRTS API Enhancement Candidates](#120-prts-api-enhancement-candidates)
-section above. Categories, sections, search quality, and template parsing are
-all viable targets for the next release cycle.
+Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG.md#130---2026-05-18) and [TS CHANGELOG](ts/CHANGELOG.md#130---2026-05-18).
+
+### Added
+
+- `list_prts_sections(page_title)` — section table of contents
+- `get_prts_categories(page_title)` — page category tags
+- `get_prts_links(page_title, direction, limit)` — outbound/inbound links
+
+### Changed
+
+- `read_prts_page` — new `section_index` parameter
+- `search_prts` — new `search_mode`, `filter_technical`; returns `totalhits`
+
+### Deferred
+
+- Template data extraction (`prop=parsetree`) — feasible but complex; defer to
+  1.4.0 after separate prototype validation.
+
+## Next Feature: TS Port of 1.3.0 (TypeScript)
+
+TS implementation now at 1.3.0 — parity with Python achieved.
+
+The next major feature area is Template Data Extraction (`prop=parsetree`),
+deferred from 1.3.0. See "Deferred" in the 1.3.0 section above.
+
+## Template Data Extraction (Future)
+
+Prototype `prop=parsetree` → XML parse → template key-value extraction.
+Decision point after prototype: productize in 1.4.0, or defer further based
+on robustness findings.
 
 ## Detailed Plans
 

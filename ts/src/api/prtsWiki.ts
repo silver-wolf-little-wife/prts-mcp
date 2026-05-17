@@ -85,6 +85,33 @@ function cleanSnippet(snippet: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const TECHNICAL_PAGE_PATTERNS = [
+  "/spine",
+  "/data",
+  "/db",
+  "/lua",
+  "/json",
+  "Widget:",
+  "Template:",
+];
+
+function isTechnicalPage(title: string): boolean {
+  return TECHNICAL_PAGE_PATTERNS.some((p) => title.includes(p));
+}
+
+function stripHtml(text: string): string {
+  let out = text.replace(CSS_JS_RE, "");
+  out = out.replace(HTML_TAG_RE, "");
+  out = unescapeHTMLEntities(out);
+  out = out.replace(/[ \t]+/g, " ");
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out.trim();
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -93,42 +120,71 @@ export interface SearchResult {
   snippet: string;
 }
 
+export interface SearchResponse {
+  totalHits: number;
+  results: SearchResult[];
+}
+
 /**
- * Search PRTS wiki and return a list of { title, snippet } objects.
+ * Search PRTS wiki.
  * Mirrors prts_wiki.search_prts().
  */
 export async function searchPrts(
   query: string,
-  limit = 5
-): Promise<SearchResult[]> {
-  const data = (await prtsGet({
+  limit = 5,
+  searchMode: "text" | "title" = "text",
+  filterTechnical = true,
+): Promise<SearchResponse> {
+  const fetchLimit = filterTechnical ? limit * 2 : limit;
+  const params: Record<string, string | number> = {
     action: "query",
     list: "search",
     srsearch: query,
-    srlimit: limit,
+    srlimit: fetchLimit,
     srnamespace: 0,
+    srinfo: "totalhits",
     format: "json",
-  })) as { query?: { search?: Array<{ title: string; snippet: string }> } };
-
-  return (data.query?.search ?? []).map((item) => {
+  };
+  if (searchMode === "title") {
+    params.srwhat = "title";
+  }
+  const data = (await prtsGet(params)) as {
+    query?: {
+      searchinfo?: { totalhits: number };
+      search?: Array<{ title: string; snippet: string }>;
+    };
+  };
+  const totalHits = data.query?.searchinfo?.totalhits ?? 0;
+  const results: SearchResult[] = [];
+  for (const item of data.query?.search ?? []) {
+    if (filterTechnical && isTechnicalPage(item.title)) continue;
+    if (results.length >= limit) break;
     let snippet = stripWikitext(item.snippet ?? "");
     snippet = unescapeHTMLEntities(snippet);
     snippet = cleanSnippet(snippet);
-    return { title: item.title, snippet };
-  });
+    results.push({ title: item.title, snippet });
+  }
+  return { totalHits, results };
 }
 
 /**
  * Fetch rendered plain-text content for a PRTS wiki page.
  * Mirrors prts_wiki.read_page().
  */
-export async function readPage(title: string): Promise<string> {
-  const data = (await prtsGet({
+export async function readPage(
+  title: string,
+  sectionIndex?: number,
+): Promise<string> {
+  const params: Record<string, string | number> = {
     action: "parse",
     page: title,
     prop: "text",
     format: "json",
-  })) as {
+  };
+  if (sectionIndex !== undefined) {
+    params.section = sectionIndex;
+  }
+  const data = (await prtsGet(params)) as {
     error?: { info?: string };
     parse?: { text?: { "*"?: string } };
   };
@@ -142,14 +198,121 @@ export async function readPage(title: string): Promise<string> {
     return `页面 '${title}' 未找到或内容为空。`;
   }
 
-  // Remove CSS rules and inline JS that survive HTML stripping as noise
-  let text = htmlText.replace(CSS_JS_RE, "");
-  // Strip HTML tags
-  text = text.replace(HTML_TAG_RE, "");
-  // Decode remaining HTML entities
-  text = unescapeHTMLEntities(text);
-  // Collapse whitespace
-  text = text.replace(/[ \t]+/g, " ");
-  text = text.replace(/\n{3,}/g, "\n\n");
-  return text.trim();
+  return stripHtml(htmlText);
+}
+
+/** Mirrors prts_wiki.list_sections(). */
+export async function listSections(
+  title: string,
+): Promise<Array<{ index: string; level: string; line: string; fromTitle: string }>> {
+  const data = (await prtsGet({
+    action: "parse",
+    page: title,
+    prop: "sections",
+    format: "json",
+  })) as {
+    error?: { info?: string };
+    parse?: {
+      sections?: Array<{
+        index: string;
+        level: string;
+        line: string;
+        fromtitle: string;
+      }>;
+    };
+  };
+
+  if (data.error?.info) {
+    throw new Error(`页面 '${title}' 未找到。`);
+  }
+
+  return (data.parse?.sections ?? []).map((s) => ({
+    index: s.index ?? "",
+    level: s.level ?? "",
+    line: s.line ?? "",
+    fromTitle: s.fromtitle ?? "",
+  }));
+}
+
+/** Mirrors prts_wiki.get_categories(). */
+export async function getCategories(title: string): Promise<string[]> {
+  const data = (await prtsGet({
+    action: "parse",
+    page: title,
+    prop: "categories",
+    format: "json",
+  })) as {
+    error?: { info?: string };
+    parse?: { categories?: Array<{ "*": string }> };
+  };
+
+  if (data.error?.info) {
+    throw new Error(`页面 '${title}' 未找到。`);
+  }
+
+  return (data.parse?.categories ?? []).map((c) => c["*"]);
+}
+
+export interface LinksResult {
+  title: string;
+  links: string[];
+  total: number;
+  hasMore: boolean;
+}
+
+/** Mirrors prts_wiki.get_links(). */
+export async function getLinks(
+  title: string,
+  direction: "outbound" | "inbound" = "outbound",
+  limit = 30,
+): Promise<LinksResult> {
+  if (direction === "outbound") {
+    const data = (await prtsGet({
+      action: "parse",
+      page: title,
+      prop: "links",
+      format: "json",
+    })) as {
+      error?: { info?: string };
+      parse?: { links?: Array<{ "*": string }> };
+    };
+
+    if (data.error?.info) {
+      throw new Error(`页面 '${title}' 未找到。`);
+    }
+
+    const allLinks = (data.parse?.links ?? []).map((l) => l["*"]);
+    return {
+      title,
+      links: allLinks.slice(0, limit),
+      total: allLinks.length,
+      hasMore: allLinks.length > limit,
+    };
+  }
+
+  if (direction !== "inbound") {
+    throw new Error(`无效的 direction 参数：${JSON.stringify(direction)}，可选值：outbound、inbound。`);
+  }
+
+  // inbound: use list=backlinks
+  const data = (await prtsGet({
+    action: "query",
+    list: "backlinks",
+    bltitle: title,
+    bllimit: Math.min(limit, 500),
+    blnamespace: 0,
+    format: "json",
+  })) as {
+    continue?: unknown;
+    query?: { backlinks?: Array<{ title: string }> };
+  };
+
+  const backlinks = data.query?.backlinks ?? [];
+  const links = backlinks.map((bl) => bl.title);
+  return {
+    title,
+    links: links.slice(0, limit),
+    total: links.length,
+    hasMore: "continue" in data,
+  };
 }
