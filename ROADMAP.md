@@ -164,7 +164,7 @@ decisions yet; this section captures what's possible.
 
 ## 1.3.0: PRTS API Deep Integration
 
-Delivered in Python. See [CHANGELOG](python/CHANGELOG.md#130---2026-05-18).
+Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG.md#130---2026-05-18) and [TS CHANGELOG](ts/CHANGELOG.md#130---2026-05-18).
 
 ### Added
 

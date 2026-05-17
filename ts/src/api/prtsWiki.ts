@@ -290,6 +290,10 @@ export async function getLinks(
     };
   }
 
+  if (direction !== "inbound") {
+    throw new Error(`无效的 direction 参数：${JSON.stringify(direction)}，可选值：outbound、inbound。`);
+  }
+
   // inbound: use list=backlinks
   const data = (await prtsGet({
     action: "query",

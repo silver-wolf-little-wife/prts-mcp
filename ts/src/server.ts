@@ -15,7 +15,6 @@ import {
   listSections,
   getCategories,
   getLinks,
-  type SearchResponse,
 } from "./api/prtsWiki.js";
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
 import { searchOperatorData } from "./data/search.js";

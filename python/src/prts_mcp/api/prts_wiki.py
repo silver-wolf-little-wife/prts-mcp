@@ -223,6 +223,9 @@ async def get_links(
             "has_more": len(all_links) > limit,
         }
 
+    if direction != "inbound":
+        raise ValueError(f"无效的 direction 参数：{direction!r}，可选值：outbound、inbound。")
+
     # inbound: use list=backlinks
     params = {
         "action": "query",
