@@ -231,14 +231,19 @@ def _require_story_zip(cfg: "Config") -> Path:
 
 
 @mcp.tool()
-def list_enemies() -> str:
-    """列出明日方舟敌方图鉴中的所有敌人。
+def list_enemies(
+    threat_level: Annotated[str | None, Field(default=None, description="按威胁等级过滤：boss（领袖）、elite（精英）、normal（普通）。不填则返回全部。")] = None,
+    limit: Annotated[int, Field(default=50, description="返回数量上限，默认 50。")] = 50,
+    offset: Annotated[int, Field(default=0, description="分页偏移量，默认 0。")] = 0,
+    full: Annotated[bool, Field(default=False, description="返回全部敌人（忽略 limit/offset）。不推荐常规使用，密集输出极易污染上下文。仅在需要完整扫描时使用。")] = False,
+) -> str:
+    """列出敌方图鉴，支持按威胁等级过滤和分页。
 
-    返回每个敌人的名称、威胁等级（领袖/精英/普通）、编号和简要描述。
-    获取名称后，可调用 get_enemy_info 查看该敌人的详细资料，
-    或使用 search_enemies 进行全文正则搜索。
+    默认返回前 50 条。若需翻页，增大 offset 即可。
+    若只想看领袖/BOSS 级敌人，设置 threat_level=\"boss\"。
+    不推荐使用 full=true，图鉴共有 1500+ 条目。
     """
-    return _list_enemies()
+    return _list_enemies(threat_level=threat_level, limit=limit, offset=offset, full=full)
 
 
 @mcp.tool()

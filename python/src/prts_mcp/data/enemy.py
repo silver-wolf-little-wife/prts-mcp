@@ -13,11 +13,13 @@ def _get_config() -> Config:
 
 
 def clear_enemy_caches() -> None:
-    _load_enemy_data.cache_clear()
+    _load_enemy_handbook.cache_clear()
+    _load_enemy_database.cache_clear()
     _build_enemy_name_to_id.cache_clear()
 
 
-_ENEMY_FILE = "enemy_handbook_table.json"
+_HANDBOOK_FILE = "enemy_handbook_table.json"
+_DATABASE_FILE = "enemy_database.json"
 
 
 def _missing_data_message() -> str:
@@ -40,23 +42,61 @@ def _has_enemy_data() -> bool:
     cfg = _get_config()
     if cfg.effective_excel_path is None:
         return False
-    return _store().exists(_ENEMY_FILE)
+    return _store().exists(_HANDBOOK_FILE)
+
+
+def _database_store() -> DirectoryStore:
+    """Return a store rooted at levels/enemydata/ for enemy_database.json."""
+    ep = _get_config().effective_excel_path
+    assert ep is not None
+    db_root = ep.parent / "levels" / "enemydata"
+    return DirectoryStore(db_root)
+
+
+def _has_database() -> bool:
+    cfg = _get_config()
+    if cfg.effective_excel_path is None:
+        return False
+    return _database_store().exists(_DATABASE_FILE)
+
+
+def _m_value(obj: Any, default: Any = None) -> Any:
+    """Unwrap {m_defined, m_value} if present, else return as-is."""
+    if isinstance(obj, dict) and "m_value" in obj:
+        return obj["m_value"]
+    return obj if obj is not None else default
 
 
 @lru_cache(maxsize=1)
-def _load_enemy_data() -> dict[str, Any]:
+def _load_enemy_handbook() -> dict[str, Any]:
     store = _store()
-    if not store.exists(_ENEMY_FILE):
+    if not store.exists(_HANDBOOK_FILE):
         raise FileNotFoundError(
-            f"敌人图鉴数据文件不存在：{store.root / _ENEMY_FILE}。"
-            "数据目录可能为空，或挂载路径有误。"
+            f"敌人图鉴数据文件不存在：{store.root / _HANDBOOK_FILE}。"
         )
-    return store.read_json(_ENEMY_FILE)
+    return store.read_json(_HANDBOOK_FILE)
+
+
+@lru_cache(maxsize=1)
+def _load_enemy_database() -> dict[str, Any] | None:
+    """Load enemy_database.json. Returns None when the file is absent."""
+    if not _has_database():
+        return None
+    store = _database_store()
+    raw = store.read_json(_DATABASE_FILE)
+    # Build enemyId → first-level-enemyData lookup
+    index: dict[str, dict] = {}
+    for entry in raw.get("enemies", []):
+        key = entry.get("Key", "")
+        values = entry.get("Value", [])
+        if values and key:
+            index[key] = values[0].get("enemyData", {})
+    return {"_index": index}
 
 
 @lru_cache(maxsize=1)
 def _build_enemy_name_to_id() -> dict[str, str]:
-    raw = _load_enemy_data()
+    raw = _load_enemy_handbook()
     ed = raw.get("enemyData", {})
     return {info["name"]: eid for eid, info in ed.items() if info.get("name")}
 
@@ -70,20 +110,28 @@ def _resolve_enemy_id(name: str) -> str | None:
 # Format helpers
 # ---------------------------------------------------------------------------
 
-_LABEL_ZH: dict[str, str] = {
-    "enemyId": "ID",
-    "enemyIndex": "编号",
-    "name": "名称",
-    "enemyLevel": "威胁等级",
-    "description": "描述",
-    "attackType": "攻击方式",
-    "ability": "特殊能力",
-}
-
 _ENEMY_LEVEL_ZH: dict[str, str] = {
     "BOSS": "领袖",
     "ELITE": "精英",
     "NORMAL": "普通",
+}
+
+_DAMAGE_TYPE_ZH: dict[str, str] = {
+    "PHYSIC": "物理",
+    "MAGIC": "法术",
+    "HEAL": "治疗",
+}
+
+_IMMUNITY_LABELS: dict[str, str] = {
+    "stunImmune": "眩晕",
+    "silenceImmune": "沉默",
+    "sleepImmune": "睡眠",
+    "frozenImmune": "冻结",
+    "levitateImmune": "浮空",
+    "disarmedCombatImmune": "缴械",
+    "fearedImmune": "恐惧",
+    "palsyImmune": "瘫痪",
+    "attractImmune": "牵引",
 }
 
 
@@ -118,10 +166,7 @@ def _fmt_enemy(info: dict, include_id: bool = False) -> str:
 
     damage_types: list[str] = info.get("damageType") or []
     if damage_types:
-        dt_zh = ", ".join(
-            {"PHYSIC": "物理", "MAGIC": "法术", "HEAL": "治疗"}.get(dt, dt)
-            for dt in damage_types
-        )
+        dt_zh = ", ".join(_DAMAGE_TYPE_ZH.get(dt, dt) for dt in damage_types)
         lines.append(f"- **伤害类型**：{dt_zh}")
 
     enemy_tags: list[str] = info.get("enemyTags") or []
@@ -131,18 +176,117 @@ def _fmt_enemy(info: dict, include_id: bool = False) -> str:
     return "\n".join(lines)
 
 
+def _fmt_stats(db_entry: dict | None) -> str:
+    """Format combat stats from enemy_database.json."""
+    if db_entry is None:
+        return ""
+
+    attrs: dict = db_entry.get("attributes", {})
+    hp = _m_value(attrs.get("maxHp"), 0)
+    atk = _m_value(attrs.get("atk"), 0)
+    defense = _m_value(attrs.get("def"), 0)
+    res = _m_value(attrs.get("magicResistance"), 0.0)
+    speed = _m_value(attrs.get("moveSpeed"), 0.0)
+    atk_time = _m_value(attrs.get("baseAttackTime"), 0.0)
+    atk_speed = _m_value(attrs.get("attackSpeed"), 100.0)
+    mass = _m_value(attrs.get("massLevel"), 0)
+    hp_recovery = _m_value(attrs.get("hpRecoveryPerSec"), 0.0)
+
+    lines: list[str] = []
+    lines.append("\n## 战斗属性")
+    if hp:
+        lines.append(f"- **最大生命**：{hp:,}")
+    if atk:
+        lines.append(f"- **攻击力**：{atk}")
+    if defense:
+        lines.append(f"- **防御力**：{defense}")
+    if res is not None:
+        lines.append(f"- **法术抗性**：{res}")
+    if speed:
+        lines.append(f"- **移动速度**：{speed}")
+    if atk_time:
+        lines.append(f"- **攻击间隔**：{atk_time}s")
+    if atk_speed != 100.0:
+        lines.append(f"- **攻击速度**：{atk_speed}")
+    if mass:
+        lines.append(f"- **重量等级**：{mass}")
+    if hp_recovery:
+        lines.append(f"- **每秒生命回复**：{hp_recovery}")
+
+    # Immunities
+    immunities = []
+    for key, label in _IMMUNITY_LABELS.items():
+        if _m_value(attrs.get(key), False):
+            immunities.append(label)
+    if immunities:
+        lines.append(f"- **免疫**：{'、'.join(immunities)}")
+
+    # Life point reduction
+    lpr = _m_value(attrs.get("lifePointReduce"), 0)
+    if lpr:
+        lines.append(f"- **生命值扣除**：{lpr}")
+
+    # Skills
+    skills: list[dict] = db_entry.get("skills") or []
+    if skills:
+        lines.append("\n## 技能")
+        for s in skills:
+            prefab = s.get("prefabKey", "未知")
+            cooldown = s.get("cooldown", "")
+            sp_cost = _m_value(s.get("spData", {}).get("spCost") if s.get("spData") else None, None)
+            init_cd = s.get("initCooldown", "")
+
+            parts = [f"- **{prefab}**"]
+            cd_parts = []
+            if cooldown:
+                cd_parts.append(f"冷却 {cooldown}s")
+            if init_cd and init_cd != cooldown:
+                cd_parts.append(f"初始 {init_cd}s")
+            if sp_cost:
+                cd_parts.append(f"SP {sp_cost}")
+            if cd_parts:
+                parts.append(f"（{'，'.join(cd_parts)}）")
+
+            # Blackboard params
+            blackboard: list[dict] = s.get("blackboard", [])
+            if blackboard:
+                bb_strs = []
+                for b in blackboard[:6]:
+                    key = b.get("key", "")
+                    val = b.get("value", "")
+                    if val is not None:
+                        bb_strs.append(f"{key}={val}")
+                if bb_strs:
+                    parts.append(": " + "，".join(bb_strs))
+            lines.append("".join(parts))
+
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
-def list_enemies() -> str:
-    """Return a list of all enemies in the handbook."""
+def list_enemies(
+    threat_level: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    full: bool = False,
+) -> str:
+    """List enemies with optional filtering and pagination.
+
+    Args:
+        threat_level: Filter by BOSS / ELITE / NORMAL.
+        limit: Max entries to return (ignored when full=True).
+        offset: Pagination offset.
+        full: Return ALL entries. Discouraged for normal use.
+    """
     if not _has_enemy_data():
         return _missing_data_message()
 
     try:
-        raw = _load_enemy_data()
+        raw = _load_enemy_handbook()
     except FileNotFoundError as exc:
         return str(exc)
 
@@ -150,16 +294,29 @@ def list_enemies() -> str:
     if not ed:
         return "敌人图鉴数据为空。"
 
-    # Filter hidden entries, sort by index
     entries = [
         (eid, info)
         for eid, info in ed.items()
         if not info.get("hideInHandbook") and info.get("name")
     ]
-    entries.sort(key=lambda x: (x[1].get("sortId", 9999), x[0]))
 
-    lines: list[str] = [f"# 全部敌人图鉴（共 {len(entries)} 个）\n"]
-    for _eid, info in entries:
+    if threat_level:
+        level_filter = threat_level.upper()
+        if level_filter not in _ENEMY_LEVEL_ZH:
+            return f"无效的 threat_level 参数：{threat_level!r}，可选值：boss、elite、normal。"
+        entries = [(e, i) for e, i in entries
+                   if i.get("enemyLevel", "").upper() == level_filter]
+
+    entries.sort(key=lambda x: (x[1].get("sortId", 9999), x[0]))
+    total = len(entries)
+
+    if full:
+        displayed = entries
+    else:
+        displayed = entries[offset:offset + limit]
+
+    header = f"# 敌人图鉴（共 {total} 个）\n"
+    for _eid, info in displayed:
         level = info.get("enemyLevel", "")
         level_zh = _ENEMY_LEVEL_ZH.get(level, level)
         index = info.get("enemyIndex", "")
@@ -168,13 +325,16 @@ def list_enemies() -> str:
         line = f"- **{name}** [{level_zh}] ({index})"
         if desc:
             line += f" — {desc}"
-        lines.append(line)
+        header += line + "\n"
 
-    return "\n".join(lines)
+    if not full and total > offset + limit:
+        header += f"\n（显示第 {offset+1}–{min(offset+limit, total)} 条，共 {total} 条。使用 offset={offset+limit} 查看下一页）"
+
+    return header.strip()
 
 
 def get_enemy_info(name: str) -> str:
-    """Return full info for a single enemy by name."""
+    """Return full info for a single enemy, with combat stats from database."""
     if not _has_enemy_data():
         return _missing_data_message()
 
@@ -186,7 +346,7 @@ def get_enemy_info(name: str) -> str:
         return f"未找到敌人 '{name}'。请使用游戏内名称。"
 
     try:
-        raw = _load_enemy_data()
+        raw = _load_enemy_handbook()
     except FileNotFoundError as exc:
         return str(exc)
 
@@ -195,7 +355,15 @@ def get_enemy_info(name: str) -> str:
     if info is None:
         return f"敌人 '{name}' 暂无详细信息。"
 
-    return _fmt_enemy(info, include_id=True)
+    result = _fmt_enemy(info, include_id=True)
+
+    # Merge combat stats from enemy_database.json
+    db = _load_enemy_database()
+    db_entry = db["_index"].get(eid) if db else None
+    if db_entry:
+        result += _fmt_stats(db_entry)
+
+    return result
 
 
 def search_enemies(pattern: str, max_results: int = 30) -> str:
@@ -209,7 +377,7 @@ def search_enemies(pattern: str, max_results: int = 30) -> str:
         return f"正则表达式无效：{exc}"
 
     try:
-        raw = _load_enemy_data()
+        raw = _load_enemy_handbook()
     except FileNotFoundError as exc:
         return str(exc)
 
@@ -221,8 +389,7 @@ def search_enemies(pattern: str, max_results: int = 30) -> str:
         name = info.get("name") or ""
         desc = info.get("description") or ""
         ability = info.get("ability") or ""
-        searchable = f"{name} {desc} {ability}"
-        if regex.search(searchable):
+        if regex.search(f"{name} {desc} {ability}"):
             matches.append(info)
         if len(matches) >= max_results:
             break

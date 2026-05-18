@@ -284,13 +284,20 @@ function createMcpServer(): McpServer {
   server.tool(
     "list_enemies",
     [
-      "列出明日方舟敌方图鉴中的所有敌人。",
-      "返回每个敌人的名称、威胁等级（领袖/精英/普通）、编号和简要描述。",
-      "获取名称后，可调用 get_enemy_info 查看该敌人的详细资料，",
-      "或使用 search_enemies 进行全文正则搜索。",
+      "列出敌方图鉴，支持按威胁等级过滤和分页。",
+      "默认返回前 50 条。若需翻页，增大 offset 即可。",
+      "若只想看领袖/BOSS 级敌人，设置 threat_level=\"boss\"。",
+      "不推荐使用 full=true，图鉴共有 1500+ 条目，密集输出极易污染上下文。",
     ].join(" "),
-    {},
-    () => ({ content: [{ type: "text", text: listEnemies() }] })
+    {
+      threat_level: z.string().optional().describe("按威胁等级过滤：boss（领袖）、elite（精英）、normal（普通）。不填则返回全部。"),
+      limit: z.number().int().min(1).max(200).default(50).describe("返回数量上限，默认 50。"),
+      offset: z.number().int().min(0).default(0).describe("分页偏移量，默认 0。"),
+      full: z.boolean().default(false).describe("返回全部敌人（忽略 limit/offset）。不推荐常规使用。"),
+    },
+    ({ threat_level, limit, offset, full }) => ({
+      content: [{ type: "text", text: listEnemies(threat_level ?? null, limit, offset, full) }],
+    })
   );
 
   server.tool(
