@@ -10,7 +10,7 @@ import { DirectoryStore } from "./stores.js";
 // Module-level caches
 // ---------------------------------------------------------------------------
 
-let _enemyData: Record<string, EnemyEntry> | null = null;
+let _enemyData: EnemyHandbookData | null = null;
 let _nameToEnemyId: Map<string, string> | null = null;
 
 const ENEMY_FILE = "enemy_handbook_table.json";

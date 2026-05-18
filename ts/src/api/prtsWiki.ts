@@ -238,23 +238,51 @@ export async function listSections(
 // Parsetree XML parser
 // ---------------------------------------------------------------------------
 
-const TEMPLATE_RE = /<template[^>]*>\s*<title>([\s\S]*?)<\/title>([\s\S]*?)<\/template>/g;
+function* splitTopLevelTags(xml: string, tag: string): Generator<string> {
+  const open = `<${tag}`;
+  const close = `</${tag}>`;
+
+  let depth = 0;
+  let start = 0;
+
+  for (let i = 0; i < xml.length; ) {
+    if (xml.startsWith(open, i)) {
+      if (depth === 0) start = i;
+      depth++;
+      i += open.length;
+    } else if (xml.startsWith(close, i)) {
+      depth--;
+      if (depth === 0) {
+        yield xml.substring(start, i + close.length);
+      }
+      i += close.length;
+    } else {
+      i++;
+    }
+  }
+}
+
+function stripComments(xml: string): string {
+  return xml.replace(/<comment>[\s\S]*?<\/comment>/g, "");
+}
+
 const PART_RE = /<part>([\s\S]*?)<\/part>/g;
-const NAME_RE = /<name[^>]*>(.*?)<\/name>/;
-const VALUE_RE = /<value>(.*?)<\/value>/;
+const NAME_RE = /<name[^>]*>([\s\S]*?)<\/name>/;
+const VALUE_RE = /<value>([\s\S]*?)<\/value>/;
 const INDEX_RE = /\bindex\s*=/;
 
 function parsePart(partXml: string): { key?: string; value: string } | null {
   const nameMatch = partXml.match(NAME_RE);
   const valueMatch = partXml.match(VALUE_RE);
   if (!valueMatch?.[1]) return null;
-  const value = valueMatch[1].trim();
+  // Strip nested template tags from the value
+  const raw = valueMatch[1].replace(/<template[\s\S]*?<\/template>/g, "");
+  const value = raw.trim();
   if (!value) return null;
   if (nameMatch) {
-    const nameText = nameMatch[1];
-    if (INDEX_RE.test(partXml)) return { value }; // positional
-    const cleanName = nameText.replace(/<[^>]+>/g, "").trim();
-    if (cleanName) return { key: cleanName, value };
+    const nameText = nameMatch[1].replace(/<[^>]+>/g, "").trim();
+    if (!nameText && INDEX_RE.test(partXml)) return { value }; // positional (name index=N)
+    if (nameText) return { key: nameText, value };
   }
   return { value };
 }
@@ -262,25 +290,22 @@ function parsePart(partXml: string): { key?: string; value: string } | null {
 function parseParsetreeXml(xml: string): Record<string, Record<string, unknown>> {
   const templates: Record<string, Record<string, unknown>> = {};
 
-  let tMatch: RegExpExecArray | null;
-  TEMPLATE_RE.lastIndex = 0;
-  while ((tMatch = TEMPLATE_RE.exec(xml)) !== null) {
-    let title = tMatch[1].replace(/<comment>[\s\S]*?<\/comment>/g, "").trim();
+  for (const tXml of splitTopLevelTags(xml, "template")) {
+    const titleMatch = tXml.match(/<title>([\s\S]*?)<\/title>/);
+    if (!titleMatch) continue;
+
+    const title = stripComments(titleMatch[1]).replace(/\n/g, "").trim();
     if (!title) continue;
-    title = title.replace(/\n/g, "");
-    const body = tMatch[2];
+
+    const commentMatch = tXml.match(/<comment>([\s\S]*?)<\/comment>/);
+    const comment = commentMatch?.[1]?.trim() ?? "";
 
     const kv: Record<string, string> = {};
     const positional: string[] = [];
-    let comment = "";
-
-    // Extract comment if present in title
-    const cMatch = tMatch[1].match(/<comment>([\s\S]*?)<\/comment>/);
-    if (cMatch?.[1]) comment = cMatch[1].trim();
 
     let pMatch: RegExpExecArray | null;
     PART_RE.lastIndex = 0;
-    while ((pMatch = PART_RE.exec(body)) !== null) {
+    while ((pMatch = PART_RE.exec(tXml)) !== null) {
       const parsed = parsePart(pMatch[1]);
       if (!parsed) continue;
       if (parsed.key) {
