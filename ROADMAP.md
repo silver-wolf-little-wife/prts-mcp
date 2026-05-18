@@ -7,8 +7,8 @@ data architecture are now under a compatibility contract.
 
 ## Current Release
 
-- Python: `1.3.0`
-- TypeScript: `1.3.0`
+- Python: `1.3.1`
+- TypeScript: `1.3.1`
 - The public tool surface (17 MCP tools) is frozen in the 1.x line.
   Automated CI checks enforce this.
 - 1.1.0 adds 3 search tools. 1.2.0 adds 2 story summary tools. 1.3.0 adds 3 PRTS Wiki deep integration tools.
