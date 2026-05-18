@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **PRTS template data extraction.** `get_prts_template(page_title)` returns
+  structured key-value data from MediaWiki template calls on a page. Supports
+  `CharinfoV2` (operator), `敌人信息/common2` (enemy), `道具信息` (item), and
+  other name=value pattern templates via `action=parse&prop=parsetree`.
+- **Enemy handbook tools.** Three new tools backed by `enemy_handbook_table.json`:
+  - `list_enemies()` — all handbook enemies with name, threat level, index, and
+    short description.
+  - `get_enemy_info(name)` — full enemy entry with attack type, damage type,
+    abilities, and tags.
+  - `search_enemies(pattern)` — regex search across enemy names, descriptions,
+    and abilities.
+
 ## [1.3.1] - 2026-05-19
 
 ### Fixed

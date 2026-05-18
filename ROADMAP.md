@@ -7,8 +7,8 @@ data architecture are now under a compatibility contract.
 
 ## Current Release
 
-- Python: `1.3.1`
-- TypeScript: `1.3.1`
+- Python: `1.3.1` (1.4.0 in development)
+- TypeScript: `1.3.1` (1.4.0 in development)
 - The public tool surface (17 MCP tools) is frozen in the 1.x line.
   Automated CI checks enforce this.
 - 1.1.0 adds 3 search tools. 1.2.0 adds 2 story summary tools. 1.3.0 adds 3 PRTS Wiki deep integration tools.
@@ -181,6 +181,22 @@ Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG
 
 - Template data extraction (`prop=parsetree`) — feasible but complex; defer to
   1.4.0 after separate prototype validation.
+
+## 1.4.0 (In Development): Template Extraction + Enemy Handbook
+
+In development on `feat/v1.4.0-prts-template-enemy`.
+
+### Added (so far)
+
+- `get_prts_template(page_title)` — structured key-value extraction from wiki templates
+- `list_enemies()` — enemy handbook listing (local JSON)
+- `get_enemy_info(name)` — single enemy entry detail
+- `search_enemies(pattern)` — regex search across enemies
+
+### Planned
+
+- Additional local data domains (items, stages) and PRTS Wiki enhancements
+  pending further prototype validation.
 
 ## Next Feature: TS Port of 1.3.0 (TypeScript)
 
