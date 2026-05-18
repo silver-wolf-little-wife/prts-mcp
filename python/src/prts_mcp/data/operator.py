@@ -65,7 +65,8 @@ def _load_charword_table() -> dict[str, Any]:
 def _build_name_to_id() -> dict[str, str]:
     """Map operator Chinese name -> charId."""
     ct = _load_character_table()
-    return {info["name"]: cid for cid, info in ct.items() if info.get("name")}
+    return {info["name"]: cid for cid, info in ct.items()
+            if info.get("name") and cid.startswith("char_")}
 
 
 def _resolve_char_id(name: str) -> str | None:
