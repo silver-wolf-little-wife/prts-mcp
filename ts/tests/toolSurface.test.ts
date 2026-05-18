@@ -9,6 +9,7 @@ const EXPECTED_TOOLS = [
   "list_prts_sections",
   "get_prts_categories",
   "get_prts_links",
+  "get_prts_template",
   "get_operator_archives",
   "get_operator_voicelines",
   "get_operator_basic_info",

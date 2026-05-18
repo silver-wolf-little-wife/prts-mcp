@@ -10,6 +10,7 @@ EXPECTED_TOOL_SURFACE = {
     "list_prts_sections": ("page_title",),
     "get_prts_categories": ("page_title",),
     "get_prts_links": ("page_title", "direction", "limit"),
+    "get_prts_template": ("page_title",),
     "get_operator_archives": ("operator_name",),
     "get_operator_voicelines": ("operator_name",),
     "get_operator_basic_info": ("operator_name",),

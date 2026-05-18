@@ -15,6 +15,7 @@ import {
   listSections,
   getCategories,
   getLinks,
+  getTemplateData,
 } from "./api/prtsWiki.js";
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
 import { searchOperatorData } from "./data/search.js";
@@ -202,6 +203,31 @@ function createMcpServer(): McpServer {
           ? `\n（共 ${result.total} 条，还有更多）`
           : `\n（共 ${result.total} 条）`;
         return { content: [{ type: "text", text: result.links.map((ln) => `- ${ln}`).join("\n") + suffix }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }] };
+      }
+    }
+  );
+
+  server.tool(
+    "get_prts_template",
+    [
+      "获取 PRTS 维基页面的结构化模板数据。",
+      "提取页面中所有模板调用的键值对，返回按模板名分组的 dict。",
+      "典型模板：干员页面的 CharinfoV2（干员名、稀有度、职业、所属等），",
+      "敌人页面的 敌人信息/common2（名称、地位级别、描述、伤害类型等），",
+      "物品页面的 道具信息（名称、用途、获得方式等）。",
+    ].join(" "),
+    {
+      page_title: z.string().describe("词条标题，如「阿米娅」。"),
+    },
+    async ({ page_title }) => {
+      try {
+        const templates = await getTemplateData(page_title);
+        if (Object.keys(templates).length === 0) {
+          return { content: [{ type: "text", text: `页面 '${page_title}' 未找到可提取的模板数据。` }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(templates, null, 2) }] };
       } catch (e) {
         return { content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }] };
       }

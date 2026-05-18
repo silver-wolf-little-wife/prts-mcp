@@ -17,6 +17,7 @@ from prts_mcp.api.prts_wiki import (
     list_sections as _list_sections,
     get_categories as _get_categories,
     get_links as _get_links,
+    get_template_data as _get_template_data,
 )
 from prts_mcp.data.operator import (
     get_operator_archives as _get_archives,
@@ -151,6 +152,28 @@ async def get_prts_links(
     has_more = result["has_more"]
     suffix = f"\n（共 {total} 条，还有更多）" if has_more else f"\n（共 {total} 条）"
     return "\n".join(f"- {ln}" for ln in links) + suffix
+
+
+@mcp.tool()
+async def get_prts_template(
+    page_title: Annotated[str, Field(description="词条标题，如「阿米娅」。")],
+) -> str:
+    """获取 PRTS 维基页面的结构化模板数据。
+
+    提取页面中所有模板调用的键值对，返回按模板名分组的 dict。
+    典型模板：干员页面的 CharinfoV2（干员名、稀有度、职业、所属等），
+    敌人页面的 敌人信息/common2（名称、地位级别、描述、伤害类型等），
+    物品页面的 道具信息（名称、用途、获得方式等）。
+    """
+    try:
+        templates = await _get_template_data(page_title)
+    except ValueError as e:
+        return str(e)
+    if not templates:
+        return f"页面 '{page_title}' 未找到可提取的模板数据。"
+
+    import json
+    return json.dumps(templates, ensure_ascii=False, indent=2)
 
 
 @mcp.tool()

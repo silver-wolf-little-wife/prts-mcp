@@ -4,6 +4,8 @@ import asyncio
 import html as _html
 import re
 
+import xml.etree.ElementTree as ET
+
 import httpx
 
 from prts_mcp.config import PRTS_API_ENDPOINT, USER_AGENT, RATE_LIMIT_INTERVAL
@@ -248,6 +250,85 @@ async def get_links(
         "total": len(links),
         "has_more": has_more,
     }
+
+
+async def get_template_data(title: str) -> dict:
+    """Return structured key-value data from template calls on a wiki page.
+
+    Fetches the page's parsetree via action=parse&prop=parsetree and extracts
+    key=value parts from every template that uses the <name>kv</name> pattern
+    (e.g. {{CharinfoV2}}, {{敌人信息/common2}}, {{道具信息}}).
+
+    Named-positional (index) templates like {{Navigator}} or {{参阅}} are
+    included as positional fields in the dict value.
+    """
+    await _rate_limit()
+    params = {
+        "action": "parse",
+        "page": title,
+        "prop": "parsetree",
+        "format": "json",
+    }
+    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
+        resp = await client.get(PRTS_API_ENDPOINT, params=params)
+        resp.raise_for_status()
+    data = resp.json()
+
+    error = data.get("error", {}).get("info", "")
+    if error:
+        raise ValueError(f"页面 '{title}' 未找到。")
+
+    xml_str = data.get("parse", {}).get("parsetree", {}).get("*", "")
+    if not xml_str:
+        raise ValueError(f"页面 '{title}' 无 parsetree 数据。")
+
+    root = ET.fromstring(xml_str)
+    templates: dict[str, dict] = {}
+
+    for elem in root.iter("template"):
+        t_title_elem = elem.find("title")
+        if t_title_elem is None or not (t_title_elem.text):
+            continue
+        t_name = t_title_elem.text.strip()
+        if not t_name:
+            continue
+
+        # Merge comment text (e.g. <!-- --> inside title) — strip it
+        comment = elem.find("title/comment")
+        comment_text = comment.text.strip() if comment is not None and comment.text else ""
+
+        kv: dict[str, str] = {}
+        positional: list[str] = []
+
+        for part in elem.findall("part"):
+            name_el = part.find("name")
+            value_el = part.find("value")
+            if value_el is None or not value_el.text:
+                continue
+
+            val = value_el.text.strip()
+            if not val:
+                continue
+
+            if name_el is not None and "index" in name_el.attrib:
+                positional.append(val)
+            elif name_el is not None and name_el.text:
+                key = name_el.text.strip()
+                if key:
+                    kv[key] = val
+
+        entry: dict = {}
+        if kv:
+            entry.update(kv)
+        if positional:
+            entry["_positional"] = positional
+        if comment_text:
+            entry["_comment"] = comment_text
+
+        if entry:
+            templates[t_name] = entry
+
+    return templates
 
 
 def _clean_snippet(snippet: str) -> str:
