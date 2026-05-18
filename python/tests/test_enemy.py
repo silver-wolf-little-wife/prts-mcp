@@ -1,0 +1,218 @@
+"""Tests for enemy data module — focus on format parity with TS implementation."""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from prts_mcp.data.enemy import (
+    clear_enemy_caches,
+    list_enemies,
+    get_enemy_info,
+    search_enemies,
+)
+
+
+def _write_handbook(excel: Path) -> None:
+    (excel / "enemy_handbook_table.json").write_text(
+        json.dumps({
+            "enemyData": {
+                "enemy_1505_frstar": {
+                    "enemyId": "enemy_1505_frstar",
+                    "enemyIndex": "FN",
+                    "name": "霜星",
+                    "enemyLevel": "BOSS",
+                    "sortId": 100,
+                    "description": "整合运动法术部队干部。",
+                    "damageType": ["MAGIC"],
+                    "hideInHandbook": False,
+                },
+                "enemy_1004_mslime": {
+                    "enemyId": "enemy_1004_mslime",
+                    "enemyIndex": "B1",
+                    "name": "源石虫",
+                    "enemyLevel": "NORMAL",
+                    "sortId": 1,
+                    "description": "野生的被感染生物。",
+                    "damageType": ["PHYSIC", "MAGIC"],
+                    "hideInHandbook": False,
+                },
+                "enemy_hidden": {
+                    "enemyId": "enemy_hidden",
+                    "name": "隐藏敌人",
+                    "enemyLevel": "ELITE",
+                    "sortId": 50,
+                    "description": "应被过滤。",
+                    "hideInHandbook": True,
+                },
+            }
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def _write_database(db_root: Path) -> None:
+    (db_root / "enemy_database.json").write_text(
+        json.dumps({
+            "enemies": [
+                {
+                    "Key": "enemy_1505_frstar",
+                    "Value": [{
+                        "level": 0,
+                        "enemyData": {
+                            "attributes": {
+                                "maxHp": {"m_defined": True, "m_value": 25000},
+                                "atk": {"m_defined": True, "m_value": 420},
+                                "def": {"m_defined": True, "m_value": 250},
+                                "magicResistance": {"m_defined": True, "m_value": 50.0},
+                                "moveSpeed": {"m_defined": True, "m_value": 0.5},
+                                "baseAttackTime": {"m_defined": True, "m_value": 3.7},
+                                "stunImmune": {"m_defined": True, "m_value": True},
+                                "frozenImmune": {"m_defined": True, "m_value": True},
+                            },
+                            "skills": [
+                                {
+                                    "prefabKey": "ArcticBlast",
+                                    "cooldown": 8.5,
+                                    "blackboard": [
+                                        {"key": "duration", "value": 8.0},
+                                        {"key": "atk_scale", "value": 1.5},
+                                    ],
+                                },
+                            ],
+                        },
+                    }],
+                },
+            ],
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture
+def gamedata(tmp_path: Path):
+    excel = tmp_path / "zh_CN" / "gamedata" / "excel"
+    excel.mkdir(parents=True)
+    db_root = tmp_path / "zh_CN" / "gamedata" / "levels" / "enemydata"
+    db_root.mkdir(parents=True)
+
+    # Write minimum operator files so config validates
+    for f in ("character_table.json", "handbook_info_table.json",
+             "charword_table.json", "story_review_table.json"):
+        (excel / f).write_text("{}", encoding="utf-8")
+
+    _write_handbook(excel)
+    _write_database(db_root)
+
+    with patch.dict(os.environ, {"GAMEDATA_PATH": str(tmp_path)}, clear=False):
+        os.environ.pop("STORYJSON_PATH", None)
+        clear_enemy_caches()
+        yield tmp_path
+
+    clear_enemy_caches()
+
+
+class TestListEnemies:
+    def test_default_filters_hidden(self, gamedata):
+        out = list_enemies(limit=10)
+        assert "霜星" in out
+        assert "源石虫" in out
+        assert "隐藏敌人" not in out
+
+    def test_threat_level_filter(self, gamedata):
+        out = list_enemies(threat_level="boss", limit=10)
+        assert "霜星" in out
+        assert "源石虫" not in out
+
+    def test_threat_level_invalid_returns_error(self, gamedata):
+        out = list_enemies(threat_level="INVALID")
+        assert "无效的 threat_level" in out
+
+    def test_offset_beyond_total(self, gamedata):
+        out = list_enemies(offset=999)
+        assert "超出范围" in out
+
+    def test_invalid_limit(self, gamedata):
+        out = list_enemies(limit=0)
+        assert "无效的 limit" in out
+
+    def test_invalid_offset(self, gamedata):
+        out = list_enemies(offset=-1)
+        assert "无效的 offset" in out
+
+    def test_full_returns_all_no_pagination_hint(self, gamedata):
+        out = list_enemies(full=True)
+        assert "霜星" in out
+        assert "源石虫" in out
+        assert "使用 offset" not in out
+
+    def test_description_newline_stripped(self, gamedata, tmp_path):
+        # Override one entry with a description containing newline.
+        excel = tmp_path / "zh_CN" / "gamedata" / "excel"
+        (excel / "enemy_handbook_table.json").write_text(
+            json.dumps({"enemyData": {"e1": {
+                "name": "测试", "enemyLevel": "NORMAL", "sortId": 1,
+                "enemyIndex": "T1",
+                "description": "第一行\n第二行",
+            }}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        clear_enemy_caches()
+        out = list_enemies(limit=5)
+        # Description line must not contain a literal newline mid-bullet.
+        for line in out.split("\n"):
+            if line.startswith("- **测试**"):
+                assert "\n" not in line
+                break
+
+
+class TestGetEnemyInfo:
+    def test_merges_handbook_and_database(self, gamedata):
+        out = get_enemy_info("霜星")
+        # Handbook fields
+        assert "**ID**：enemy_1505_frstar" in out
+        assert "**威胁等级**：领袖" in out
+        # Combat stats from database
+        assert "**最大生命**：25,000" in out
+        assert "**攻击力**：420" in out
+        assert "**法术抗性**：50" in out
+        # Immunities
+        assert "**免疫**：眩晕、冻结" in out
+        # Skills
+        assert "ArcticBlast" in out
+        assert "duration=8.0" in out
+
+    def test_handbook_only_when_no_db_entry(self, gamedata):
+        # 源石虫 has no entry in our minimal database fixture
+        out = get_enemy_info("源石虫")
+        assert "源石虫" in out
+        assert "**最大生命**" not in out
+
+    def test_unknown_name(self, gamedata):
+        assert "未找到敌人" in get_enemy_info("不存在的敌人")
+
+    def test_damage_type_uses_ideographic_separator(self, gamedata):
+        out = get_enemy_info("源石虫")
+        # Two damage types — must use 、 not ", "
+        assert "**伤害类型**：物理、法术" in out
+
+
+class TestSearchEnemies:
+    def test_match_by_description(self, gamedata):
+        out = search_enemies("整合运动")
+        assert "霜星" in out
+
+    def test_no_match(self, gamedata):
+        out = search_enemies("绝对不存在的关键词")
+        assert "未找到匹配" in out
+
+    def test_invalid_regex(self, gamedata):
+        out = search_enemies("[unclosed")
+        assert "正则表达式无效" in out
+
+    def test_filters_hidden(self, gamedata):
+        out = search_enemies("隐藏")
+        assert "应被过滤" not in out

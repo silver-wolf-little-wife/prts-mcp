@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -174,10 +175,11 @@ async def get_prts_template(
         templates = await _get_template_data(page_title)
     except ValueError as e:
         return str(e)
+    except Exception as e:
+        return f"获取页面 '{page_title}' 的模板数据失败：{e}"
     if not templates:
         return f"页面 '{page_title}' 未找到可提取的模板数据。"
 
-    import json
     return json.dumps(templates, ensure_ascii=False, indent=2)
 
 
@@ -637,8 +639,10 @@ def _run_startup_sync() -> None:
             _log_sync_result(r)
             if r.status == "updated":
                 from prts_mcp.data.operator import clear_operator_caches
+                from prts_mcp.data.enemy import clear_enemy_caches
 
                 clear_operator_caches()
+                clear_enemy_caches()
             return _sync_needs_retry(r.status)
 
         needs_retry = _run_initial_sync("Gamedata", _sync_gamedata)

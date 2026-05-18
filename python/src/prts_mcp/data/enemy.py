@@ -79,7 +79,12 @@ def _load_enemy_handbook() -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def _load_enemy_database() -> dict[str, Any] | None:
-    """Load enemy_database.json. Returns None when the file is absent."""
+    """Load enemy_database.json. Returns None when the file is absent.
+
+    Note: lru_cache is acceptable here because the sync hook in server.py
+    calls clear_enemy_caches() after a successful sync, invalidating both
+    the None and the populated cache.
+    """
     if not _has_database():
         return None
     store = _database_store()
@@ -166,7 +171,7 @@ def _fmt_enemy(info: dict, include_id: bool = False) -> str:
 
     damage_types: list[str] = info.get("damageType") or []
     if damage_types:
-        dt_zh = ", ".join(_DAMAGE_TYPE_ZH.get(dt, dt) for dt in damage_types)
+        dt_zh = "、".join(_DAMAGE_TYPE_ZH.get(dt, dt) for dt in damage_types)
         lines.append(f"- **伤害类型**：{dt_zh}")
 
     enemy_tags: list[str] = info.get("enemyTags") or []
@@ -185,7 +190,7 @@ def _fmt_stats(db_entry: dict | None) -> str:
     hp = _m_value(attrs.get("maxHp"), 0)
     atk = _m_value(attrs.get("atk"), 0)
     defense = _m_value(attrs.get("def"), 0)
-    res = _m_value(attrs.get("magicResistance"), 0.0)
+    res = _m_value(attrs.get("magicResistance"))
     speed = _m_value(attrs.get("moveSpeed"), 0.0)
     atk_time = _m_value(attrs.get("baseAttackTime"), 0.0)
     atk_speed = _m_value(attrs.get("attackSpeed"), 100.0)
@@ -285,6 +290,11 @@ def list_enemies(
     if not _has_enemy_data():
         return _missing_data_message()
 
+    if limit < 1:
+        return f"无效的 limit 参数：{limit}，需 ≥ 1。"
+    if offset < 0:
+        return f"无效的 offset 参数：{offset}，需 ≥ 0。"
+
     try:
         raw = _load_enemy_handbook()
     except FileNotFoundError as exc:
@@ -310,6 +320,9 @@ def list_enemies(
     entries.sort(key=lambda x: (x[1].get("sortId", 9999), x[0]))
     total = len(entries)
 
+    if not full and offset >= total and total > 0:
+        return f"# 敌人图鉴（共 {total} 个）\n\noffset={offset} 超出范围（总计 {total} 条）。"
+
     if full:
         displayed = entries
     else:
@@ -321,7 +334,7 @@ def list_enemies(
         level_zh = _ENEMY_LEVEL_ZH.get(level, level)
         index = info.get("enemyIndex", "")
         name = info.get("name", "")
-        desc = (info.get("description") or "")[:60]
+        desc = (info.get("description") or "").replace("\n", " ")[:60]
         line = f"- **{name}** [{level_zh}] ({index})"
         if desc:
             line += f" — {desc}"

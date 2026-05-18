@@ -134,7 +134,6 @@ function getHandbook(): EnemyHandbook {
     }
     _handbook = store.readJson<EnemyHandbook>(HANDBOOK_FILE);
   }
-  if (_handbook === undefined) throw new Error("handbook load failed");
   return _handbook;
 }
 
@@ -242,6 +241,11 @@ function fmtEnemy(info: EnemyHandbookEntry, includeId = false): string {
   return lines.join("\n");
 }
 
+function formatNumber(n: number): string {
+  // Locale-independent thousands separator (matches Python's f"{n:,}").
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 function fmtStats(dbEntry: EnemyDbEntry): string {
   const attrs = dbEntry.attributes ?? {};
   const hp = mValue<number>(attrs.maxHp, 0) ?? 0;
@@ -257,7 +261,7 @@ function fmtStats(dbEntry: EnemyDbEntry): string {
 
   const lines: string[] = [];
   lines.push("\n## 战斗属性");
-  if (hp) lines.push(`- **最大生命**：${hp.toLocaleString()}`);
+  if (hp) lines.push(`- **最大生命**：${formatNumber(hp)}`);
   if (atk) lines.push(`- **攻击力**：${atk}`);
   if (def) lines.push(`- **防御力**：${def}`);
   if (res !== undefined && res !== null) lines.push(`- **法术抗性**：${res}`);
@@ -318,6 +322,9 @@ export function listEnemies(
 ): string {
   if (!hasEnemyData()) return missingDataMessage();
 
+  if (limit < 1) return `无效的 limit 参数：${limit}，需 ≥ 1。`;
+  if (offset < 0) return `无效的 offset 参数：${offset}，需 ≥ 0。`;
+
   let raw: EnemyHandbook;
   try { raw = getHandbook(); } catch (err) {
     return err instanceof Error ? err.message : String(err);
@@ -343,6 +350,11 @@ export function listEnemies(
   });
 
   const total = entries.length;
+
+  if (!full && offset >= total && total > 0) {
+    return `# 敌人图鉴（共 ${total} 个）\n\noffset=${offset} 超出范围（总计 ${total} 条）。`;
+  }
+
   const displayed = full ? entries : entries.slice(offset, offset + limit);
 
   let out = `# 敌人图鉴（共 ${total} 个）\n`;
@@ -351,7 +363,7 @@ export function listEnemies(
     const levelZh = ENEMY_LEVEL_ZH[level] ?? level;
     const index = info.enemyIndex ?? "";
     const name = info.name ?? "";
-    const desc = (info.description ?? "").slice(0, 60);
+    const desc = (info.description ?? "").replace(/\n/g, " ").slice(0, 60);
     let line = `- **${name}** [${levelZh}] (${index})`;
     if (desc) line += ` — ${desc}`;
     out += line + "\n";

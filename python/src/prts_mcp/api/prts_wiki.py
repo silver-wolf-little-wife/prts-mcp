@@ -256,8 +256,12 @@ async def get_template_data(title: str) -> dict:
     """Return structured key-value data from template calls on a wiki page.
 
     Fetches the page's parsetree via action=parse&prop=parsetree and extracts
-    key=value parts from every template that uses the <name>kv</name> pattern
-    (e.g. {{CharinfoV2}}, {{敌人信息/common2}}, {{道具信息}}).
+    key=value parts from every TOP-LEVEL template that uses the <name>kv</name>
+    pattern (e.g. {{CharinfoV2}}, {{敌人信息/common2}}, {{道具信息}}).
+
+    Nested templates inside a value (e.g. {{color|...}} inside CharinfoV2's
+    特性 field) are stripped from the value text — they are NOT yielded as
+    separate top-level entries. This matches the TS implementation.
 
     Named-positional (index) templates like {{Navigator}} or {{参阅}} are
     included as positional fields in the dict value.
@@ -285,17 +289,21 @@ async def get_template_data(title: str) -> dict:
     root = ET.fromstring(xml_str)
     templates: dict[str, dict] = {}
 
-    for elem in root.iter("template"):
+    # Only iterate top-level <template> children of <root>, not nested ones.
+    for elem in root.findall("template"):
         t_title_elem = elem.find("title")
-        if t_title_elem is None or not (t_title_elem.text):
+        if t_title_elem is None:
             continue
-        t_name = t_title_elem.text.strip()
+        # Strip nested <comment> tags out of title before extracting text.
+        comment_text = ""
+        for sub in list(t_title_elem):
+            if sub.tag == "comment":
+                if sub.text:
+                    comment_text = sub.text.strip()
+                t_title_elem.remove(sub)
+        t_name = (t_title_elem.text or "").strip()
         if not t_name:
             continue
-
-        # Merge comment text (e.g. <!-- --> inside title) — strip it
-        comment = elem.find("title/comment")
-        comment_text = comment.text.strip() if comment is not None and comment.text else ""
 
         kv: dict[str, str] = {}
         positional: list[str] = []
@@ -303,10 +311,13 @@ async def get_template_data(title: str) -> dict:
         for part in elem.findall("part"):
             name_el = part.find("name")
             value_el = part.find("value")
-            if value_el is None or not value_el.text:
+            if value_el is None:
                 continue
 
-            val = value_el.text.strip()
+            # Get full text of <value>, stripping any nested <template> children.
+            for nested in list(value_el.findall("template")):
+                value_el.remove(nested)
+            val = (value_el.text or "").strip()
             if not val:
                 continue
 

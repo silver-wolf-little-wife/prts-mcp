@@ -18,7 +18,7 @@ import {
   getTemplateData,
 } from "./api/prtsWiki.js";
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
-import { listEnemies, getEnemyInfo, searchEnemies } from "./data/enemy.js";
+import { clearEnemyCaches, listEnemies, getEnemyInfo, searchEnemies } from "./data/enemy.js";
 import { searchOperatorData } from "./data/search.js";
 import { syncRelease, syncReleaseArchive } from "./data/sync.js";
 import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, STORY_ZH_CN } from "./data/datasets.js";
@@ -724,6 +724,7 @@ async function runStartupSync(): Promise<void> {
       const sha = r.commitSha ? r.commitSha.slice(0, 8) : "unknown";
       if (r.status === "updated") {
         clearOperatorCaches();
+        clearEnemyCaches();
         log("INFO", `Data updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
       } else if (r.status === "up_to_date") {
         log("INFO", `Data is up to date (${r.spec.repo} @ ${sha}).`);
