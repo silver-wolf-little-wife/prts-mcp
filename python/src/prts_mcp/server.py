@@ -24,6 +24,11 @@ from prts_mcp.data.operator import (
     get_operator_voicelines as _get_voicelines,
     get_operator_basic_info as _get_basic_info,
 )
+from prts_mcp.data.enemy import (
+    list_enemies as _list_enemies,
+    get_enemy_info as _get_enemy_info,
+    search_enemies as _search_enemies,
+)
 from prts_mcp.data.search import search_operator_data as _search_operator_data
 from prts_mcp.data.story import (
     list_story_events as _list_story_events,
@@ -223,6 +228,41 @@ def _require_story_zip(cfg: "Config") -> Path:
             "或等待服务器自动从 GitHub Release 下载完成后重试。"
         )
     return cfg.effective_storyjson_zip
+
+
+@mcp.tool()
+def list_enemies() -> str:
+    """列出明日方舟敌方图鉴中的所有敌人。
+
+    返回每个敌人的名称、威胁等级（领袖/精英/普通）、编号和简要描述。
+    获取名称后，可调用 get_enemy_info 查看该敌人的详细资料，
+    或使用 search_enemies 进行全文正则搜索。
+    """
+    return _list_enemies()
+
+
+@mcp.tool()
+def get_enemy_info(
+    name: Annotated[str, Field(description="敌人的游戏内中文名，如「源石虫」、「霜星」。")],
+) -> str:
+    """获取指定敌人的详细图鉴资料。
+
+    返回该敌人的威胁等级、描述、攻击方式、伤害类型和特殊能力等信息。
+    """
+    return _get_enemy_info(name)
+
+
+@mcp.tool()
+def search_enemies(
+    pattern: Annotated[str, Field(description="正则表达式模式，如 '萨卡兹|骑士'。")],
+    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+) -> str:
+    """在敌人图鉴中进行全文正则搜索。
+
+    搜索范围包含敌人名称、描述和特殊能力文本。可用于探索特定种族、
+    阵营或关键词相关的敌人信息。
+    """
+    return _search_enemies(pattern, max_results=max_results)
 
 
 @mcp.tool()

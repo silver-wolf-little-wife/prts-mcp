@@ -18,6 +18,7 @@ import {
   getTemplateData,
 } from "./api/prtsWiki.js";
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
+import { listEnemies, getEnemyInfo, searchEnemies } from "./data/enemy.js";
 import { searchOperatorData } from "./data/search.js";
 import { syncRelease, syncReleaseArchive } from "./data/sync.js";
 import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, STORY_ZH_CN } from "./data/datasets.js";
@@ -274,6 +275,43 @@ function createMcpServer(): McpServer {
       const text = getOperatorBasicInfo(operator_name);
       return { content: [{ type: "text", text }] };
     }
+  );
+
+  // -------------------------------------------------------------------------
+  // Enemy tools
+  // -------------------------------------------------------------------------
+
+  server.tool(
+    "list_enemies",
+    [
+      "列出明日方舟敌方图鉴中的所有敌人。",
+      "返回每个敌人的名称、威胁等级（领袖/精英/普通）、编号和简要描述。",
+      "获取名称后，可调用 get_enemy_info 查看该敌人的详细资料，",
+      "或使用 search_enemies 进行全文正则搜索。",
+    ].join(" "),
+    {},
+    () => ({ content: [{ type: "text", text: listEnemies() }] })
+  );
+
+  server.tool(
+    "get_enemy_info",
+    "获取指定敌人的详细图鉴资料。",
+    { name: z.string().describe("敌人的游戏内中文名，如「源石虫」、「霜星」。") },
+    ({ name }) => ({ content: [{ type: "text", text: getEnemyInfo(name) }] })
+  );
+
+  server.tool(
+    "search_enemies",
+    [
+      "在敌人图鉴中进行全文正则搜索。",
+      "搜索范围包含敌人名称、描述和特殊能力文本。",
+      "可用于探索特定种族、阵营或关键词相关的敌人信息。",
+    ].join(" "),
+    {
+      pattern: z.string().describe("正则表达式模式，如 '萨卡兹|骑士'。"),
+      max_results: z.number().int().min(1).max(100).default(30).describe("返回结果数量上限，默认 30。"),
+    },
+    ({ pattern, max_results }) => ({ content: [{ type: "text", text: searchEnemies(pattern, max_results) }] })
   );
 
   // -------------------------------------------------------------------------
