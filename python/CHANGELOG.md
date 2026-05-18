@@ -7,19 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-19
+
 ### Added
 
 - **PRTS template data extraction.** `get_prts_template(page_title)` returns
   structured key-value data from MediaWiki template calls on a page. Supports
   `CharinfoV2` (operator), `敌人信息/common2` (enemy), `道具信息` (item), and
-  other name=value pattern templates via `action=parse&prop=parsetree`.
-- **Enemy handbook tools.** Three new tools backed by `enemy_handbook_table.json`:
-  - `list_enemies()` — all handbook enemies with name, threat level, index, and
-    short description.
-  - `get_enemy_info(name)` — full enemy entry with attack type, damage type,
-    abilities, and tags.
-  - `search_enemies(pattern)` — regex search across enemy names, descriptions,
-    and abilities.
+  other name=value pattern templates via `action=parse&prop=parsetree`. Only
+  top-level templates are returned; nested templates inside a value are
+  stripped from the value text.
+- **Enemy handbook tools.** Three new tools backed by `enemy_handbook_table.json`
+  with optional combat-stats merge from `levels/enemydata/enemy_database.json`:
+  - `list_enemies(threat_level, limit, offset, full)` — paginated listing
+    with optional filter by `boss` / `elite` / `normal`. Defaults to first 50
+    entries; `full=true` returns all 1500+ entries (discouraged for normal use).
+  - `get_enemy_info(name)` — handbook entry merged with full combat stats:
+    HP / ATK / DEF / RES, attack interval, mass level, status immunities, and
+    skill list with cooldowns and blackboard parameters.
+  - `search_enemies(pattern, max_results)` — regex search across enemy
+    names, descriptions, and ability text.
 
 ## [1.3.1] - 2026-05-19
 

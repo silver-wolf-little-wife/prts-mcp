@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-19
+
 ### Added
 
 - **PRTS template data extraction.** `get_prts_template(page_title)` returns
-  structured key-value data from MediaWiki template calls on a page.
-- **Enemy handbook tools.** `list_enemies()`, `get_enemy_info(name)`, and
-  `search_enemies(pattern)` backed by `enemy_handbook_table.json`.
+  structured key-value data from MediaWiki template calls on a page via
+  `action=parse&prop=parsetree`. Only top-level templates are returned;
+  nested templates inside values are stripped.
+- **Enemy handbook tools.** Three new tools backed by `enemy_handbook_table.json`
+  with optional combat-stats merge from `levels/enemydata/enemy_database.json`:
+  - `list_enemies(threat_level?, limit, offset, full)` — paginated listing
+    with `boss` / `elite` / `normal` filter. Defaults to first 50 entries.
+  - `get_enemy_info(name)` — handbook entry merged with HP / ATK / DEF / RES,
+    immunities, and skill list with blackboard params.
+  - `search_enemies(pattern, max_results)` — regex search across enemy
+    names, descriptions, and abilities.
 
 ## [1.3.1] - 2026-05-19
 

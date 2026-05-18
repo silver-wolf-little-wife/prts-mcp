@@ -1,17 +1,19 @@
 # PRTS-MCP Roadmap
 
-_Last updated: 2026-05-18_
+_Last updated: 2026-05-19_
 
 PRTS-MCP has reached its first stable release. The public tool surface and
 data architecture are now under a compatibility contract.
 
 ## Current Release
 
-- Python: `1.3.1` (1.4.0 in development)
-- TypeScript: `1.3.1` (1.4.0 in development)
+- Python: `1.4.0`
+- TypeScript: `1.4.0`
 - The public tool surface (21 MCP tools) is frozen in the 1.x line.
   Automated CI checks enforce this.
-- 1.1.0 adds 3 search tools. 1.2.0 adds 2 story summary tools. 1.3.0 adds 3 PRTS Wiki deep integration tools.
+- 1.1.0 adds 3 search tools. 1.2.0 adds 2 story summary tools. 1.3.0 adds 3 PRTS
+  Wiki deep integration tools. 1.4.0 adds 4 tools (template extraction + enemy
+  handbook).
 - A migration guide covers behavioral changes for users upgrading from 0.x.
 
 ## 1.x Patch Policy
@@ -177,39 +179,37 @@ Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG
 - `read_prts_page` — new `section_index` parameter
 - `search_prts` — new `search_mode`, `filter_technical`; returns `totalhits`
 
-### Deferred
+### Delivered in 1.4.0
 
-- Template data extraction (`prop=parsetree`) — feasible but complex; defer to
-  1.4.0 after separate prototype validation.
+- Template data extraction (`prop=parsetree`) — see 1.4.0 section below.
 
-## 1.4.0 (In Development): Template Extraction + Enemy Handbook
+## 1.4.0: Template Extraction + Enemy Handbook
 
-In development on `feat/v1.4.0-prts-template-enemy`.
+Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG.md#140---2026-05-19) and [TS CHANGELOG](ts/CHANGELOG.md#140---2026-05-19).
 
-### Added (so far)
+### Added
 
-- `get_prts_template(page_title)` — structured key-value extraction from wiki templates
-- `list_enemies()` — enemy handbook listing (local JSON)
-- `get_enemy_info(name)` — single enemy entry detail
-- `search_enemies(pattern)` — regex search across enemies
+- `get_prts_template(page_title)` — structured key-value extraction from PRTS
+  Wiki templates via `action=parse&prop=parsetree`. Top-level templates only;
+  nested templates inside values are stripped.
+- `list_enemies(threat_level, limit, offset, full)` — paginated enemy handbook
+  listing with threat-level filter (boss/elite/normal).
+- `get_enemy_info(name)` — handbook entry merged with combat stats from
+  `enemy_database.json` (HP/ATK/DEF/RES, immunities, skills with blackboard
+  parameters).
+- `search_enemies(pattern, max_results)` — regex search across enemy names,
+  descriptions, and abilities.
 
-### Planned
+### Notes
 
-- Additional local data domains (items, stages) and PRTS Wiki enhancements
-  pending further prototype validation.
+- Enemy data is local JSON only — no PRTS Wiki API rate-limit cost.
+- `enemy_database.json` lives at `levels/enemydata/`; loaded on demand and
+  cleared together with operator caches after a successful sync.
 
-## Next Feature: TS Port of 1.3.0 (TypeScript)
+## Next
 
-TS implementation now at 1.3.0 — parity with Python achieved.
-
-The next major feature area is Template Data Extraction (`prop=parsetree`),
-deferred from 1.3.0. See "Deferred" in the 1.3.0 section above.
-
-## Template Data Extraction (Future)
-
-Prototype `prop=parsetree` → XML parse → template key-value extraction.
-Decision point after prototype: productize in 1.4.0, or defer further based
-on robustness findings.
+Possible directions for 1.5.0 — items / stages, additional PRTS Wiki
+enhancements. Scope TBD.
 
 ## Detailed Plans
 
