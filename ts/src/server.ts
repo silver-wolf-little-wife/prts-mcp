@@ -15,8 +15,10 @@ import {
   listSections,
   getCategories,
   getLinks,
+  getTemplateData,
 } from "./api/prtsWiki.js";
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
+import { clearEnemyCaches, listEnemies, getEnemyInfo, searchEnemies } from "./data/enemy.js";
 import { searchOperatorData } from "./data/search.js";
 import { syncRelease, syncReleaseArchive } from "./data/sync.js";
 import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, STORY_ZH_CN } from "./data/datasets.js";
@@ -209,6 +211,31 @@ function createMcpServer(): McpServer {
   );
 
   server.tool(
+    "get_prts_template",
+    [
+      "获取 PRTS 维基页面的结构化模板数据。",
+      "提取页面中所有模板调用的键值对，返回按模板名分组的 dict。",
+      "典型模板：干员页面的 CharinfoV2（干员名、稀有度、职业、所属等），",
+      "敌人页面的 敌人信息/common2（名称、地位级别、描述、伤害类型等），",
+      "物品页面的 道具信息（名称、用途、获得方式等）。",
+    ].join(" "),
+    {
+      page_title: z.string().describe("词条标题，如「阿米娅」。"),
+    },
+    async ({ page_title }) => {
+      try {
+        const templates = await getTemplateData(page_title);
+        if (Object.keys(templates).length === 0) {
+          return { content: [{ type: "text", text: `页面 '${page_title}' 未找到可提取的模板数据。` }] };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(templates, null, 2) }] };
+      } catch (e) {
+        return { content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }] };
+      }
+    }
+  );
+
+  server.tool(
     "get_operator_archives",
     [
       "获取指定干员的档案资料。",
@@ -248,6 +275,50 @@ function createMcpServer(): McpServer {
       const text = getOperatorBasicInfo(operator_name);
       return { content: [{ type: "text", text }] };
     }
+  );
+
+  // -------------------------------------------------------------------------
+  // Enemy tools
+  // -------------------------------------------------------------------------
+
+  server.tool(
+    "list_enemies",
+    [
+      "列出敌方图鉴，支持按威胁等级过滤和分页。",
+      "默认返回前 50 条。若需翻页，增大 offset 即可。",
+      "若只想看领袖/BOSS 级敌人，设置 threat_level=\"boss\"。",
+      "不推荐使用 full=true，图鉴共有 1500+ 条目，密集输出极易污染上下文。",
+    ].join(" "),
+    {
+      threat_level: z.string().optional().describe("按威胁等级过滤：boss（领袖）、elite（精英）、normal（普通）。不填则返回全部。"),
+      limit: z.number().int().min(1).max(200).default(50).describe("返回数量上限，默认 50。"),
+      offset: z.number().int().min(0).default(0).describe("分页偏移量，默认 0。"),
+      full: z.boolean().default(false).describe("返回全部敌人（忽略 limit/offset）。不推荐常规使用。"),
+    },
+    ({ threat_level, limit, offset, full }) => ({
+      content: [{ type: "text", text: listEnemies(threat_level ?? null, limit, offset, full) }],
+    })
+  );
+
+  server.tool(
+    "get_enemy_info",
+    "获取指定敌人的详细图鉴资料。",
+    { name: z.string().describe("敌人的游戏内中文名，如「源石虫」、「霜星」。") },
+    ({ name }) => ({ content: [{ type: "text", text: getEnemyInfo(name) }] })
+  );
+
+  server.tool(
+    "search_enemies",
+    [
+      "在敌人图鉴中进行全文正则搜索。",
+      "搜索范围包含敌人名称、描述和特殊能力文本。",
+      "可用于探索特定种族、阵营或关键词相关的敌人信息。",
+    ].join(" "),
+    {
+      pattern: z.string().describe("正则表达式模式，如 '萨卡兹|骑士'。"),
+      max_results: z.number().int().min(1).max(100).default(30).describe("返回结果数量上限，默认 30。"),
+    },
+    ({ pattern, max_results }) => ({ content: [{ type: "text", text: searchEnemies(pattern, max_results) }] })
   );
 
   // -------------------------------------------------------------------------
@@ -653,6 +724,7 @@ async function runStartupSync(): Promise<void> {
       const sha = r.commitSha ? r.commitSha.slice(0, 8) : "unknown";
       if (r.status === "updated") {
         clearOperatorCaches();
+        clearEnemyCaches();
         log("INFO", `Data updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
       } else if (r.status === "up_to_date") {
         log("INFO", `Data is up to date (${r.spec.repo} @ ${sha}).`);

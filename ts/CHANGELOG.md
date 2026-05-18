@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **PRTS template data extraction.** `get_prts_template(page_title)` returns
+  structured key-value data from MediaWiki template calls on a page.
+- **Enemy handbook tools.** `list_enemies()`, `get_enemy_info(name)`, and
+  `search_enemies(pattern)` backed by `enemy_handbook_table.json`.
+
 ## [1.3.1] - 2026-05-19
 
 ### Fixed

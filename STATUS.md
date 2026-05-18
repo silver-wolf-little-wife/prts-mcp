@@ -6,10 +6,11 @@ _Last updated: 2026-05-18_
 
 | 实现 | 版本 | 状态 |
 |------|------|------|
-| Python | 1.3.0 | stable |
-| TypeScript | 1.3.0 | stable |
+| Python | 1.3.1 | stable |
+| TypeScript | 1.3.1 | stable |
+| 工作组 | 1.4.0-dev | feat/v1.4.0-prts-template-enemy |
 
-- 公共工具面：17 个 MCP 工具（1.x 冻结）
+- 公共工具面：21 个 MCP 工具（1.x 冻结，1.4.0-dev 新增 4 个）
 - 兼容性合约：1.x 期间工具名和必填参数不变
 
 ## 仓库结构
@@ -51,7 +52,7 @@ PRTS-MCP/
 
 | 数据源 | 用途 | 同步方式 |
 |--------|------|----------|
-| [ArknightsGameData](https://github.com/3aKHP/ArknightsGameData) | 干员档案/语音/基础信息 | GitHub Release `zh_CN-excel.zip` |
+| [ArknightsGameData](https://github.com/3aKHP/ArknightsGameData) | 干员/敌人档案/语音/基础信息 | GitHub Release `zh_CN-excel.zip` |
 | [ArknightsStoryJson](https://github.com/3aKHP/ArknightsStoryJson) | 剧情台词 | GitHub Release `zh_CN.zip` |
 | [PRTS Wiki API](https://prts.wiki/api.php) | 世界观词条/阵营设定 | 实时 HTTP 请求 |
 
@@ -76,10 +77,13 @@ PRTS-MCP/
 | 15 | `list_prts_sections` | PRTS Wiki | 1.3.0 |
 | 16 | `get_prts_categories` | PRTS Wiki | 1.3.0 |
 | 17 | `get_prts_links` | PRTS Wiki | 1.3.0 |
+| 18 | `get_prts_template` | PRTS Wiki | 1.4.0 |
+| 19 | `list_enemies` | GameData | 1.4.0 |
+| 20 | `get_enemy_info` | GameData | 1.4.0 |
+| 21 | `search_enemies` | GameData | 1.4.0 |
 
 ## 遗留 TODO
 
-- [ ] Template Data Extraction (`prop=parsetree`) — 1.4.0 候选，需先原型验证
 - [ ] PRTS 搜索结果中 redirect 页面自动解析（MediaWiki API 限制）
 - [ ] PRTS 搜索结果中 `/spine`、`/data` 等技术页面的更精确过滤
 

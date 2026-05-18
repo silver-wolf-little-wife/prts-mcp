@@ -1,0 +1,435 @@
+/**
+ * Enemy handbook + database reader.
+ * Reads enemy_handbook_table.json and enemy_database.json from local game data.
+ * Mirrors python/src/prts_mcp/data/enemy.py.
+ */
+
+import { dirname } from "node:path";
+import { loadConfig } from "../config.js";
+import { DirectoryStore } from "./stores.js";
+
+// ---------------------------------------------------------------------------
+// Module-level caches
+// ---------------------------------------------------------------------------
+
+let _handbook: EnemyHandbook | null = null;
+let _dbIndex: Record<string, EnemyDbEntry> | null = null;
+let _nameToEnemyId: Map<string, string> | null = null;
+
+const HANDBOOK_FILE = "enemy_handbook_table.json";
+const DATABASE_FILE = "enemy_database.json";
+
+export function clearEnemyCaches(): void {
+  _handbook = null;
+  _dbIndex = null;
+  _nameToEnemyId = null;
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface EnemyHandbookEntry {
+  enemyId?: string;
+  enemyIndex?: string;
+  enemyTags?: string[] | null;
+  sortId?: number;
+  name?: string;
+  enemyLevel?: string;
+  description?: string;
+  attackType?: string | null;
+  ability?: string | null;
+  hideInHandbook?: boolean;
+  damageType?: string[];
+}
+
+interface EnemyHandbook {
+  enemyData?: Record<string, EnemyHandbookEntry>;
+  raceData?: Record<string, { id?: string; raceName?: string }>;
+}
+
+interface MValue {
+  m_defined?: boolean;
+  m_value?: unknown;
+}
+
+interface EnemyDbAttrs {
+  maxHp?: MValue;
+  atk?: MValue;
+  def?: MValue;
+  magicResistance?: MValue;
+  moveSpeed?: MValue;
+  baseAttackTime?: MValue;
+  attackSpeed?: MValue;
+  massLevel?: MValue;
+  hpRecoveryPerSec?: MValue;
+  spRecoveryPerSec?: MValue;
+  lifePointReduce?: MValue;
+  stunImmune?: MValue;
+  silenceImmune?: MValue;
+  sleepImmune?: MValue;
+  frozenImmune?: MValue;
+  levitateImmune?: MValue;
+  disarmedCombatImmune?: MValue;
+  fearedImmune?: MValue;
+  palsyImmune?: MValue;
+  attractImmune?: MValue;
+  [key: string]: MValue | undefined;
+}
+
+interface EnemySkill {
+  prefabKey?: string;
+  priority?: number;
+  cooldown?: number;
+  initCooldown?: number;
+  spData?: { spCost?: MValue };
+  blackboard?: Array<{ key?: string; value?: unknown }>;
+}
+
+interface EnemyDbEntry {
+  attributes?: EnemyDbAttrs;
+  skills?: EnemySkill[] | null;
+  talentBlackboard?: Array<{ key?: string; value?: unknown }>;
+}
+
+// Database file has { enemies: [{ Key, Value: [{ level, enemyData }] }] }
+interface EnemyDbRow {
+  Key?: string;
+  Value?: Array<{ level?: number; enemyData?: EnemyDbEntry }>;
+}
+
+interface EnemyDatabase {
+  enemies?: EnemyDbRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function missingDataMessage(): string {
+  const cfg = loadConfig();
+  return (
+    "敌人图鉴数据暂不可用。" +
+    "容器启动时的 auto-sync 可能仍在进行中，请稍后重试；" +
+    "若持续出现此提示，请检查网络连接或提供 GITHUB_TOKEN 以降低限速风险。" +
+    `（当前同步目标路径：${cfg.excelPath}）`
+  );
+}
+
+function hasEnemyData(): boolean {
+  const cfg = loadConfig();
+  if (cfg.effectiveExcelPath === null) return false;
+  return new DirectoryStore(cfg.effectiveExcelPath).exists(HANDBOOK_FILE);
+}
+
+function getHandbook(): EnemyHandbook {
+  if (_handbook === null) {
+    const cfg = loadConfig();
+    if (cfg.effectiveExcelPath === null) throw new Error("effectiveExcelPath is null");
+    const store = new DirectoryStore(cfg.effectiveExcelPath);
+    if (!store.exists(HANDBOOK_FILE)) {
+      throw new Error(
+        `敌人图鉴数据文件不存在：${store.resolveForDiagnostics(HANDBOOK_FILE)}。`
+      );
+    }
+    _handbook = store.readJson<EnemyHandbook>(HANDBOOK_FILE);
+  }
+  return _handbook;
+}
+
+function mValue<T>(obj: unknown, defaultValue?: T): T | undefined {
+  if (obj && typeof obj === "object" && "m_value" in obj) {
+    return (obj as MValue).m_value as T | undefined;
+  }
+  if (obj !== null && obj !== undefined) return obj as T;
+  return defaultValue;
+}
+
+function getDbIndex(): Record<string, EnemyDbEntry> {
+  if (_dbIndex === null) {
+    const cfg = loadConfig();
+    const ep = cfg.effectiveExcelPath;
+    if (!ep) { _dbIndex = {}; return _dbIndex; }
+    const dbRoot = join(dirname(ep), "levels", "enemydata");
+    // path handling
+    const store = new DirectoryStore(dbRoot);
+    if (!store.exists(DATABASE_FILE)) { _dbIndex = {}; return _dbIndex; }
+    const raw = store.readJson<EnemyDatabase>(DATABASE_FILE);
+    const index: Record<string, EnemyDbEntry> = {};
+    for (const row of raw.enemies ?? []) {
+      if (row.Key && row.Value && row.Value[0]?.enemyData) {
+        index[row.Key] = row.Value[0].enemyData;
+      }
+    }
+    _dbIndex = index;
+  }
+  return _dbIndex;
+}
+
+function join(...parts: (string | undefined | null)[]): string {
+  return parts.filter(Boolean).join("/").replace(/\/+/g, "/");
+}
+
+function buildNameToEnemyId(): Map<string, string> {
+  if (_nameToEnemyId === null) {
+    const raw = getHandbook();
+    const ed = raw.enemyData ?? {};
+    _nameToEnemyId = new Map(
+      Object.entries(ed)
+        .filter(([, info]) => info.name)
+        .map(([eid, info]) => [info.name!, eid])
+    );
+  }
+  return _nameToEnemyId;
+}
+
+function resolveEnemyId(name: string): string | null {
+  return buildNameToEnemyId().get(name) ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Format helpers
+// ---------------------------------------------------------------------------
+
+const ENEMY_LEVEL_ZH: Record<string, string> = {
+  BOSS: "领袖",
+  ELITE: "精英",
+  NORMAL: "普通",
+};
+
+const IMMUNITY_LABELS: Record<string, string> = {
+  stunImmune: "眩晕",
+  silenceImmune: "沉默",
+  sleepImmune: "睡眠",
+  frozenImmune: "冻结",
+  levitateImmune: "浮空",
+  disarmedCombatImmune: "缴械",
+  fearedImmune: "恐惧",
+  palsyImmune: "瘫痪",
+  attractImmune: "牵引",
+};
+
+function fmtEnemy(info: EnemyHandbookEntry, includeId = false): string {
+  const lines: string[] = [];
+  const name = info.name ?? "";
+  if (name) {
+    lines.push(`# ${name} - 敌人图鉴\n`);
+    if (includeId) lines.push(`- **ID**：${info.enemyId ?? ""}`);
+  }
+
+  if (info.enemyIndex) lines.push(`- **编号**：${info.enemyIndex}`);
+  const level = info.enemyLevel ?? "";
+  const levelZh = ENEMY_LEVEL_ZH[level] ?? level;
+  if (levelZh) lines.push(`- **威胁等级**：${levelZh}`);
+  if (info.description) lines.push(`- **描述**：${info.description}`);
+  if (info.attackType) lines.push(`- **攻击方式**：${info.attackType}`);
+  if (info.ability) lines.push(`- **特殊能力**：${info.ability}`);
+
+  const damageTypes = info.damageType ?? [];
+  if (damageTypes.length > 0) {
+    const dtZh = damageTypes.map((dt) =>
+      ({ PHYSIC: "物理", MAGIC: "法术", HEAL: "治疗" })[dt] ?? dt
+    ).join("、");
+    lines.push(`- **伤害类型**：${dtZh}`);
+  }
+
+  const tags = info.enemyTags ?? [];
+  if (tags && tags.length > 0) {
+    lines.push(`- **标签**：${tags.join("、")}`);
+  }
+
+  return lines.join("\n");
+}
+
+function formatNumber(n: number): string {
+  // Locale-independent thousands separator (matches Python's f"{n:,}").
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function fmtStats(dbEntry: EnemyDbEntry): string {
+  const attrs = dbEntry.attributes ?? {};
+  const hp = mValue<number>(attrs.maxHp, 0) ?? 0;
+  const atk = mValue<number>(attrs.atk, 0) ?? 0;
+  const def = mValue<number>(attrs.def, 0) ?? 0;
+  const res = mValue<number>(attrs.magicResistance);
+  const speed = mValue<number>(attrs.moveSpeed, 0) ?? 0;
+  const atkTime = mValue<number>(attrs.baseAttackTime, 0) ?? 0;
+  const atkSpeed = mValue<number>(attrs.attackSpeed, 100) ?? 100;
+  const mass = mValue<number>(attrs.massLevel, 0) ?? 0;
+  const hpRec = mValue<number>(attrs.hpRecoveryPerSec, 0) ?? 0;
+  const lpr = mValue<number>(attrs.lifePointReduce, 0) ?? 0;
+
+  const lines: string[] = [];
+  lines.push("\n## 战斗属性");
+  if (hp) lines.push(`- **最大生命**：${formatNumber(hp)}`);
+  if (atk) lines.push(`- **攻击力**：${atk}`);
+  if (def) lines.push(`- **防御力**：${def}`);
+  if (res !== undefined && res !== null) lines.push(`- **法术抗性**：${res}`);
+  if (speed) lines.push(`- **移动速度**：${speed}`);
+  if (atkTime) lines.push(`- **攻击间隔**：${atkTime}s`);
+  if (atkSpeed !== 100) lines.push(`- **攻击速度**：${atkSpeed}`);
+  if (mass) lines.push(`- **重量等级**：${mass}`);
+  if (hpRec) lines.push(`- **每秒生命回复**：${hpRec}`);
+
+  const immunities: string[] = [];
+  for (const [key, label] of Object.entries(IMMUNITY_LABELS)) {
+    if (mValue<boolean>(attrs[key], false)) immunities.push(label);
+  }
+  if (immunities.length > 0) lines.push(`- **免疫**：${immunities.join("、")}`);
+
+  if (lpr) lines.push(`- **生命值扣除**：${lpr}`);
+
+  const skills = dbEntry.skills ?? [];
+  if (skills.length > 0) {
+    lines.push("\n## 技能");
+    for (const s of skills) {
+      const prefab = s.prefabKey ?? "未知";
+      const cd = s.cooldown;
+      const initCd = s.initCooldown;
+      const spCost = mValue<number>(s.spData?.spCost);
+
+      const parts: string[] = [`- **${prefab}**`];
+      const cdParts: string[] = [];
+      if (cd) cdParts.push(`冷却 ${cd}s`);
+      if (initCd && initCd !== cd) cdParts.push(`初始 ${initCd}s`);
+      if (spCost) cdParts.push(`SP ${spCost}`);
+      if (cdParts.length > 0) parts.push(`（${cdParts.join("，")}）`);
+
+      const bb = s.blackboard ?? [];
+      if (bb.length > 0) {
+        const bbStrs = bb
+          .filter((b) => b.value != null)
+          .slice(0, 6)
+          .map((b) => `${b.key}=${b.value}`);
+        if (bbStrs.length > 0) parts.push(": " + bbStrs.join("，"));
+      }
+      lines.push(parts.join(""));
+    }
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function listEnemies(
+  threatLevel?: string | null,
+  limit = 50,
+  offset = 0,
+  full = false,
+): string {
+  if (!hasEnemyData()) return missingDataMessage();
+
+  if (limit < 1) return `无效的 limit 参数：${limit}，需 ≥ 1。`;
+  if (offset < 0) return `无效的 offset 参数：${offset}，需 ≥ 0。`;
+
+  let raw: EnemyHandbook;
+  try { raw = getHandbook(); } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  const ed = raw.enemyData ?? {};
+  let entries = Object.entries(ed).filter(
+    ([, info]) => !info.hideInHandbook && info.name
+  );
+
+  if (threatLevel) {
+    const filter = threatLevel.toUpperCase();
+    if (!ENEMY_LEVEL_ZH[filter]) {
+      return `无效的 threat_level 参数：${JSON.stringify(threatLevel)}，可选值：boss、elite、normal。`;
+    }
+    entries = entries.filter(([, i]) => (i.enemyLevel ?? "").toUpperCase() === filter);
+  }
+
+  entries.sort((a, b) => {
+    const sa = a[1].sortId ?? 9999;
+    const sb = b[1].sortId ?? 9999;
+    return sa !== sb ? sa - sb : a[0].localeCompare(b[0]);
+  });
+
+  const total = entries.length;
+
+  if (!full && offset >= total && total > 0) {
+    return `# 敌人图鉴（共 ${total} 个）\n\noffset=${offset} 超出范围（总计 ${total} 条）。`;
+  }
+
+  const displayed = full ? entries : entries.slice(offset, offset + limit);
+
+  let out = `# 敌人图鉴（共 ${total} 个）\n`;
+  for (const [, info] of displayed) {
+    const level = info.enemyLevel ?? "";
+    const levelZh = ENEMY_LEVEL_ZH[level] ?? level;
+    const index = info.enemyIndex ?? "";
+    const name = info.name ?? "";
+    const desc = (info.description ?? "").replace(/\n/g, " ").slice(0, 60);
+    let line = `- **${name}** [${levelZh}] (${index})`;
+    if (desc) line += ` — ${desc}`;
+    out += line + "\n";
+  }
+
+  if (!full && total > offset + limit) {
+    out += `\n（显示第 ${offset + 1}–${Math.min(offset + limit, total)} 条，共 ${total} 条。使用 offset=${offset + limit} 查看下一页）`;
+  }
+
+  return out.trim();
+}
+
+export function getEnemyInfo(name: string): string {
+  if (!hasEnemyData()) return missingDataMessage();
+
+  let eid: string | null;
+  try { eid = resolveEnemyId(name); } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  if (eid === null) return `未找到敌人 '${name}'。请使用游戏内名称。`;
+
+  let raw: EnemyHandbook;
+  try { raw = getHandbook(); } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  const info = raw.enemyData?.[eid];
+  if (!info) return `敌人 '${name}' 暂无详细信息。`;
+
+  let result = fmtEnemy(info, true);
+
+  // Merge combat stats
+  const dbIndex = getDbIndex();
+  const dbEntry = dbIndex[eid];
+  if (dbEntry) result += fmtStats(dbEntry);
+
+  return result;
+}
+
+export function searchEnemies(pattern: string, maxResults = 30): string {
+  if (!hasEnemyData()) return missingDataMessage();
+
+  let regex: RegExp;
+  try { regex = new RegExp(pattern, "i"); } catch (err) {
+    return `正则表达式无效：${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  let raw: EnemyHandbook;
+  try { raw = getHandbook(); } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  const ed = raw.enemyData ?? {};
+  const matches: EnemyHandbookEntry[] = [];
+  for (const info of Object.values(ed)) {
+    if (info.hideInHandbook) continue;
+    const searchable = `${info.name ?? ""} ${info.description ?? ""} ${info.ability ?? ""}`;
+    if (regex.test(searchable)) {
+      matches.push(info);
+      if (matches.length >= maxResults) break;
+    }
+  }
+
+  if (matches.length === 0) return `未找到匹配 '${pattern}' 的敌人。`;
+
+  const lines: string[] = [`# 搜索结果：${pattern}（共 ${matches.length} 个）\n`];
+  for (const info of matches) { lines.push(fmtEnemy(info)); lines.push(""); }
+  return lines.join("\n").trim();
+}

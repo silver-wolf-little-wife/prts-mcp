@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -17,11 +18,17 @@ from prts_mcp.api.prts_wiki import (
     list_sections as _list_sections,
     get_categories as _get_categories,
     get_links as _get_links,
+    get_template_data as _get_template_data,
 )
 from prts_mcp.data.operator import (
     get_operator_archives as _get_archives,
     get_operator_voicelines as _get_voicelines,
     get_operator_basic_info as _get_basic_info,
+)
+from prts_mcp.data.enemy import (
+    list_enemies as _list_enemies,
+    get_enemy_info as _get_enemy_info,
+    search_enemies as _search_enemies,
 )
 from prts_mcp.data.search import search_operator_data as _search_operator_data
 from prts_mcp.data.story import (
@@ -154,6 +161,29 @@ async def get_prts_links(
 
 
 @mcp.tool()
+async def get_prts_template(
+    page_title: Annotated[str, Field(description="词条标题，如「阿米娅」。")],
+) -> str:
+    """获取 PRTS 维基页面的结构化模板数据。
+
+    提取页面中所有模板调用的键值对，返回按模板名分组的 dict。
+    典型模板：干员页面的 CharinfoV2（干员名、稀有度、职业、所属等），
+    敌人页面的 敌人信息/common2（名称、地位级别、描述、伤害类型等），
+    物品页面的 道具信息（名称、用途、获得方式等）。
+    """
+    try:
+        templates = await _get_template_data(page_title)
+    except ValueError as e:
+        return str(e)
+    except Exception as e:
+        return f"获取页面 '{page_title}' 的模板数据失败：{e}"
+    if not templates:
+        return f"页面 '{page_title}' 未找到可提取的模板数据。"
+
+    return json.dumps(templates, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
 async def get_operator_archives(
     operator_name: Annotated[str, Field(description="干员的游戏内中文名，如「阿米娅」、「能天使」。")],
 ) -> str:
@@ -200,6 +230,46 @@ def _require_story_zip(cfg: "Config") -> Path:
             "或等待服务器自动从 GitHub Release 下载完成后重试。"
         )
     return cfg.effective_storyjson_zip
+
+
+@mcp.tool()
+def list_enemies(
+    threat_level: Annotated[str | None, Field(default=None, description="按威胁等级过滤：boss（领袖）、elite（精英）、normal（普通）。不填则返回全部。")] = None,
+    limit: Annotated[int, Field(default=50, description="返回数量上限，默认 50。")] = 50,
+    offset: Annotated[int, Field(default=0, description="分页偏移量，默认 0。")] = 0,
+    full: Annotated[bool, Field(default=False, description="返回全部敌人（忽略 limit/offset）。不推荐常规使用，密集输出极易污染上下文。仅在需要完整扫描时使用。")] = False,
+) -> str:
+    """列出敌方图鉴，支持按威胁等级过滤和分页。
+
+    默认返回前 50 条。若需翻页，增大 offset 即可。
+    若只想看领袖/BOSS 级敌人，设置 threat_level=\"boss\"。
+    不推荐使用 full=true，图鉴共有 1500+ 条目。
+    """
+    return _list_enemies(threat_level=threat_level, limit=limit, offset=offset, full=full)
+
+
+@mcp.tool()
+def get_enemy_info(
+    name: Annotated[str, Field(description="敌人的游戏内中文名，如「源石虫」、「霜星」。")],
+) -> str:
+    """获取指定敌人的详细图鉴资料。
+
+    返回该敌人的威胁等级、描述、攻击方式、伤害类型和特殊能力等信息。
+    """
+    return _get_enemy_info(name)
+
+
+@mcp.tool()
+def search_enemies(
+    pattern: Annotated[str, Field(description="正则表达式模式，如 '萨卡兹|骑士'。")],
+    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+) -> str:
+    """在敌人图鉴中进行全文正则搜索。
+
+    搜索范围包含敌人名称、描述和特殊能力文本。可用于探索特定种族、
+    阵营或关键词相关的敌人信息。
+    """
+    return _search_enemies(pattern, max_results=max_results)
 
 
 @mcp.tool()
@@ -569,8 +639,10 @@ def _run_startup_sync() -> None:
             _log_sync_result(r)
             if r.status == "updated":
                 from prts_mcp.data.operator import clear_operator_caches
+                from prts_mcp.data.enemy import clear_enemy_caches
 
                 clear_operator_caches()
+                clear_enemy_caches()
             return _sync_needs_retry(r.status)
 
         needs_retry = _run_initial_sync("Gamedata", _sync_gamedata)

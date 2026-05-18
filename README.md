@@ -59,6 +59,10 @@ Both implementations expose the same tool set:
 | `list_prts_sections(page_title)` | Section table of contents for a wiki page |
 | `get_prts_categories(page_title)` | Category tags for a wiki page |
 | `get_prts_links(page_title, direction, limit)` | Outbound links or inbound backlinks with pagination |
+| `get_prts_template(page_title)` | Extract structured template data (key-value pairs) from a wiki page |
+| `list_enemies()` | List all enemies in the handbook with threat level and description |
+| `get_enemy_info(name)` | Retrieve full enemy handbook entry by name |
+| `search_enemies(pattern, max_results?)` | Full-text regex search across enemy names, descriptions, and abilities |
 
 ### Quick Start
 
@@ -127,6 +131,10 @@ Published Docker images and the npm package include bundled fallback game/story 
 | `list_prts_sections(page_title)` | 获取词条的章节目录 |
 | `get_prts_categories(page_title)` | 获取词条的分类标签 |
 | `get_prts_links(page_title, direction, limit)` | 获取词条的出链或入链，支持分页 |
+| `get_prts_template(page_title)` | 提取词条中的结构化模板键值对数据 |
+| `list_enemies()` | 列出敌方图鉴中所有敌人及其威胁等级和描述 |
+| `get_enemy_info(name)` | 获取指定敌人的详细图鉴资料 |
+| `search_enemies(pattern, max_results?)` | 在敌人名称、描述和能力中执行全文正则搜索 |
 
 ### 快速开始
 
