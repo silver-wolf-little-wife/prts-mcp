@@ -1,0 +1,136 @@
+---
+project: "PRTS-MCP"
+branch: "main"
+---
+
+# CLAUDE.md — AI 协作者说明
+
+PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio）和 TypeScript（Streamable HTTP）两套独立实现。
+本文件记录**每次会话必读**的工作流。
+
+## 相关文档
+
+| 想看... | 去哪里 |
+|---|---|
+| 项目现状、版本状态、仓库结构 | [`STATUS.md`](STATUS.md) |
+| 代码规范、反模式、已知陷阱 | [`docs/dev/STYLE.md`](docs/dev/STYLE.md) |
+| 路线图与未来规划 | [`ROADMAP.md`](ROADMAP.md) |
+| 外部贡献者指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Python 实现 | [`python/`](python/) |
+| TypeScript 实现 | [`ts/`](ts/) |
+
+动手写代码前先读 `docs/dev/STYLE.md`；不确定项目欠什么时查 `STATUS.md`。
+
+---
+
+## 启动准则
+
+三条硬规则：
+
+- **需明确指令才 Commit**。对话里讨论到"要提交"不算指令，必须出现"请提交 / 请 commit / 请开 PR"这类明确祈使句
+- **一般不在 main 直接工作**，但**允许例外**：大 PR merge 完后的 chore/docs 级小修补（补一个版本号遗漏、改 typo）可以直接在 main 上。feat/fix/refactor 级一律走分支
+- **不主动 push**。即使刚 commit 完，也等用户说"请推"
+
+## 分支命名
+
+`<type>/v<version>-<topic>`，type 用 Conventional Commits 的类型。例：
+- `chore/v1.4.0-housekeeping`
+- `feat/v1.4.0-template-extraction`
+- `fix/v1.3.1-search-crash`
+
+## 单次迭代循环
+
+一个大修改（从"你决定要做 X"到"main 合进 X"）的标准循环：
+
+1. **对齐计划**：动手前用 1-2 段话描述打算做什么、拆成几个 commit、可能的风险。等用户点头
+2. **拉分支**：按上面的命名约定
+3. **动手**：按 commit 主题分批提交，每个中间 commit 都能独立编译（bisect-friendly）
+4. **本地验证**：
+   - Python: `cd python && python -m pytest tests/ -v`
+   - TypeScript: `cd ts && npm test && npm run typecheck`
+   - 双实现同步改动时两边都要跑
+5. **推分支 + 开 PR**：PR body 包含 Summary / Test plan / 未尽事宜三段
+6. **独立 CR**：spawn 子代理做独立 review（见下文）
+7. **应对 CR**：blocking 和 should-fix 处理掉，推到同分支；nits 酌情
+8. **人类 merge**：Claude 不做 merge，等用户确认
+9. **本地清扫**：`git checkout main && git pull && git branch -d <branch> && git remote prune origin`
+
+## Commit 规范
+
+严格遵守 [Conventional Commits](https://www.conventionalcommits.org/)。
+
+格式：`<type>(<scope>): <subject>`
+
+- **type**：`feat` / `fix` / `refactor` / `docs` / `chore` / `test` / `style` / `perf`
+- **scope** 常用：`python` / `ts` / `sync` / `wiki` / `operator` / `story` / `search` / `ci` / `docker`
+- **subject** 小写、祈使、≤72 字符、无句号
+
+多行 body 用 HEREDOC：
+
+```bash
+git commit -m "$(cat <<'EOF'
+feat(wiki): add template data extraction via prop=parsetree
+
+Detailed explanation...
+EOF
+)"
+```
+
+不使用 `--amend`（除非用户明确要求）；pre-commit hook 失败时不加 `--no-verify`。
+
+## 独立 CR 规范
+
+**每个 PR 都应被一个独立子代理审阅一次**——子代理看不到我们的讨论过程，从 code-only 视角会发现我们共同忽略的东西。
+
+**调用方式**：spawn 一个 `general-purpose` 子代理，prompt 要点：
+- 明确说明审阅者视角独立、要 critical
+- 提供 PR URL、分支名、基于的主线
+- 列出 PR 自述（代理不看 PR 描述会默认相信提交信息）
+- 给具体的审查清单（见下方）
+- 要求结构化输出：**Blocking / Should-fix / Nits / Verified claims**
+
+**审查清单**：
+- 实现一致性：Python 和 TS 两套实现是否行为一致（工具名、参数、输出格式）
+- 数据流：新增数据源是否经过 store 抽象层，sync 路径是否正确
+- 错误处理：缺失数据/网络失败时是否有优雅降级
+- 测试覆盖：新功能是否有对应测试
+- 版本一致性：`pyproject.toml` / `package.json` / `CHANGELOG.md` 是否同步更新
+- 公共 API：工具参数是否向后兼容（1.x 兼容性合约）
+
+**CR 返回后的处理**：
+- Blocking 必修；Should-fix 原则上都做，除非有充分理由推迟
+- 修完推到同分支，给评论者明确回复
+- 涉及架构决策的分歧先同步用户再动
+
+## 版本同步清单
+
+每次版本号变更时，需同步更新以下文件：
+
+| 文件 | 内容 |
+|------|------|
+| `python/pyproject.toml` | `version` 字段 |
+| `ts/package.json` | `version` 字段 |
+| `python/CHANGELOG.md` | 新版本条目 |
+| `ts/CHANGELOG.md` | 新版本条目 |
+| `ROADMAP.md` | 当前版本号 |
+
+涉及用户可见行为变化时，顺手更新 `README.md`。
+
+## 双实现开发规则
+
+本项目 Python 和 TypeScript 是**独立实现**，不是翻译关系。规则：
+
+- 改了一个实现的工具行为，**必须检查**另一个实现是否有对应改动
+- 公共工具名、必填参数、输出格式在两套实现间必须一致（CI 有 tool surface 测试）
+- 新工具建议先在一个实现中完成，验证后再移植到另一个
+- 两套实现各有独立的 CHANGELOG，版本号尽量同步
+
+## 已知陷阱
+
+- PRTS Wiki `action=query&prop=extracts` 会丢失模板渲染内容，必须用 `action=parse&prop=text`
+- MediaWiki 搜索默认扫描所有 namespace，需加 `srnamespace=0`
+- PRTS 的 `/spine`、`/data` 等技术页面在主命名空间，需客户端过滤
+- story_review_table.json 顶层直接是 `{event_id: entry}`，不是嵌套在某个 key 下
+- ArknightsStoryJson zip 内所有路径以 `zh_CN/` 为前缀
+- `GITHUB_MIRRORS` 配置的代理 URL 不要带尾部斜杠
+- Python 的 `httpx` 和 TS 的 `fetch` 行为不完全一致（重试、超时），sync 逻辑不要假设相同
