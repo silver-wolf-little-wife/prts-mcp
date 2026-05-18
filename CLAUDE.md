@@ -116,6 +116,17 @@ EOF
 
 涉及用户可见行为变化时，顺手更新 `README.md`。
 
+**打 tag 时使用实现级前缀**，CI 的 CD workflow 按前缀分发：
+
+```bash
+git tag python/v1.3.1 && git tag ts/v1.3.1
+git push origin python/v1.3.1 ts/v1.3.1
+```
+
+- `python/v*` → PyPI 发布
+- `ts/v*` → npm + Docker 发布
+- 不要打裸 `v*` tag（不会触发任何 CD）
+
 ## 双实现开发规则
 
 本项目 Python 和 TypeScript 是**独立实现**，不是翻译关系。规则：
