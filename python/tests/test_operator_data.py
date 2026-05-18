@@ -81,3 +81,38 @@ class TestOperatorDataRefresh:
             clear_operator_caches()
 
             assert operator._load_character_table.cache_info().currsize == 0
+
+
+class TestNameToId:
+    def test_trap_entry_with_same_name_does_not_override_operator(self, tmp_path):
+        """Regression: trap_* and token_* entries must not shadow char_* entries."""
+        import json
+        excel = tmp_path / "zh_CN" / "gamedata" / "excel"
+        excel.mkdir(parents=True)
+        (excel / "character_table.json").write_text(
+            json.dumps(
+                {
+                    "char_002_amiya": {"name": "阿米娅", "rarity": "TIER_5", "profession": "CASTER"},
+                    "trap_999_amiya_fake": {"name": "阿米娅", "rarity": "TIER_1", "profession": "TRAP"},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (excel / "handbook_info_table.json").write_text(
+            json.dumps({"handbookDict": {"char_002_amiya": {"storyTextAudio": []}}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (excel / "charword_table.json").write_text(
+            json.dumps({"charWords": {}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (excel / "story_review_table.json").write_text("{}", encoding="utf-8")
+
+        with patch.dict(os.environ, {"GAMEDATA_PATH": str(tmp_path)}, clear=False):
+            os.environ.pop("STORYJSON_PATH", None)
+            clear_operator_caches()
+
+            info = get_operator_basic_info("阿米娅")
+            assert "5★" in info, f"Expected 5★ from char_*, got: {info}"
+            assert "TRAP" not in info, f"TRAP entry leaked into result: {info}"

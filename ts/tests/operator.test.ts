@@ -107,3 +107,36 @@ test("operator data is incomplete when a required file is not a file", async () 
 
   assert.match(operator.getOperatorBasicInfo("阿米娅"), /干员数据暂不可用/);
 });
+
+test("trap entry with same name does not override operator", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  delete process.env["STORYJSON_PATH"];
+
+  const excel = join(root, "zh_CN", "gamedata", "excel");
+  mkdirSync(excel, { recursive: true });
+  writeFileSync(
+    join(excel, "character_table.json"),
+    JSON.stringify({
+      char_002_amiya: { name: "阿米娅", rarity: "TIER_5", profession: "CASTER" },
+      trap_999_amiya_fake: { name: "阿米娅", rarity: "TIER_1", profession: "TRAP" },
+    }),
+    "utf-8",
+  );
+  writeFileSync(
+    join(excel, "handbook_info_table.json"),
+    JSON.stringify({ handbookDict: { char_002_amiya: { storyTextAudio: [] } } }),
+    "utf-8",
+  );
+  writeFileSync(
+    join(excel, "charword_table.json"),
+    JSON.stringify({ charWords: {} }),
+    "utf-8",
+  );
+  writeFileSync(join(excel, "story_review_table.json"), "{}", "utf-8");
+
+  const operator = await loadOperatorModule();
+  const info = operator.getOperatorBasicInfo("阿米娅");
+  assert.match(info, /5★/);
+  assert.doesNotMatch(info, /TRAP/);
+});

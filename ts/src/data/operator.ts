@@ -152,7 +152,7 @@ export function resolveCharId(name: string): string | null {
     const ct = getCharacterTable();
     _nameToId = new Map(
       Object.entries(ct)
-        .filter(([, info]) => info.name)
+        .filter(([cid, info]) => info.name && cid.startsWith("char_"))
         .map(([cid, info]) => [info.name!, cid])
     );
   }
