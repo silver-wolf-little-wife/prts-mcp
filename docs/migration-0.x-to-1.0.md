@@ -2,8 +2,7 @@
 
 _Status: 1.0.0_
 
-PRTS-MCP 1.0 keeps the public MCP tool surface stable while normalizing the
-internal data layer.
+PRTS-MCP 1.0 keeps the public MCP tool surface stable while normalizing the internal data layer.
 
 ## What Stays Compatible
 
@@ -63,6 +62,5 @@ These changes should not require client configuration changes.
 
 ## Deferred
 
-Story summary tools are not part of the initial 1.0 migration. They may be
-considered after the reader layer is stable.
+Story summary tools are not part of the initial 1.0 migration. They may be considered after the reader layer is stable.
 

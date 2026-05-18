@@ -5,8 +5,7 @@ branch: "main"
 
 # CLAUDE.md — AI 协作者说明
 
-PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio）和 TypeScript（Streamable HTTP）两套独立实现。
-本文件记录**每次会话必读**的工作流。
+PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio）和 TypeScript（Streamable HTTP）两套独立实现。 本文件记录**每次会话必读**的工作流。
 
 ## 相关文档
 

@@ -1,215 +1,210 @@
 # PRTS-MCP Roadmap
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-19_ · [中文版](ROADMAP.zh-CN.md)
 
-PRTS-MCP has reached its first stable release. The public tool surface and
-data architecture are now under a compatibility contract.
+PRTS-MCP is past 1.0. The public tool surface and data architecture are under a 1.x compatibility contract. This document tracks **what comes next** — not what has shipped. For shipped features, see the Python and TypeScript CHANGELOGs.
 
 ## Current Release
 
 - Python: `1.4.0`
 - TypeScript: `1.4.0`
-- The public tool surface (21 MCP tools) is frozen in the 1.x line.
-  Automated CI checks enforce this.
-- 1.1.0 adds 3 search tools. 1.2.0 adds 2 story summary tools. 1.3.0 adds 3 PRTS
-  Wiki deep integration tools. 1.4.0 adds 4 tools (template extraction + enemy
-  handbook).
-- A migration guide covers behavioral changes for users upgrading from 0.x.
+- 21 public MCP tools, frozen in the 1.x line (CI-enforced).
+- See [migration guide](docs/migration-0.x-to-1.0.md) for the
+  0.x → 1.0 transition.
+
+## 1.x Compatibility Contract
+
+What stays stable through 1.x:
+
+- Tool names and required parameters.
+- Response **format** (markdown shape), though wording/details may evolve.
+- `GAMEDATA_PATH` and `STORYJSON_PATH` semantics.
+- Auto-sync from GitHub Releases as the default data source.
+
+What may change in minor releases:
+
+- New tools (additive).
+- New optional parameters with safe defaults.
+- New optional data sources / fallbacks.
+- Enhanced output content within the same format.
 
 ## 1.x Patch Policy
 
-Patch releases (1.1.1, 1.1.2, …) are limited to bug fixes and documentation
-improvements within the 1.x compatibility contract.
+Patch releases (1.x.y) are limited to bug fixes, documentation, and non-breaking experience improvements (see "Patch line" below). **No new tools, no new required parameters.**
 
-## 1.0 Goals
+## 1.x Non-Goals
 
-1. **Version alignment**
-   - Python and TypeScript share the same major and minor versions.
-   - Patch versions may diverge only for implementation-specific fixes.
-   - Release notes explicitly state cross-implementation compatibility.
-
-2. **Standardized data pipeline**
-   - Separate upstream source, local storage, JSON reading, and domain parsing.
-   - Keep existing `GAMEDATA_PATH` and `STORYJSON_PATH` semantics compatible.
-   - Hide zip-vs-directory details behind a shared reader abstraction.
-   - Make new data-backed tools easier to add without new one-off sync logic.
-
-3. **Cross-implementation behavior parity**
-   - Python and TypeScript expose the same MCP tools.
-   - Core outputs are covered by shared fixture/golden tests.
-   - CI verifies both implementations before release.
-
-4. **Documented compatibility boundary**
-   - Docker, npm, and PyPI data-bundling behavior is explicit.
-   - Migration notes cover custom data paths and startup auto-sync behavior.
-   - 1.0 starts the compatibility contract for public tool parameters and
-     response formats.
-
-## 1.0 Non-Goals
-
-- Shipping every possible Arknights data table.
+- Shipping every Arknights data table — pick what's useful for fan creation.
 - Embedding large fallback data in PyPI wheels.
-- Replacing GitHub Release based sync with a different hosting model.
-- Adding generated LLM summaries as a required runtime dependency.
+- Replacing GitHub-Release-based sync with a different hosting model.
+- Adding LLM-generated content as a required runtime dependency.
 
-## Release Plan
+---
 
-### `1.0.0-alpha.1`: Architecture Skeleton
+## Minor Release Plan
 
-- Status: ready for prerelease tagging from the current `main` commit.
-- Introduced the dataset/reader abstraction in both implementations.
-- Moved existing operator and story readers behind the new abstraction.
-- Kept current user-facing behavior compatible.
-- Added focused tests around directory-backed and zip-backed reads.
-- Added prerelease-aware release workflows for Python and TypeScript tags.
+Each minor version carries one main data domain. Cross-source fusion tools ride along with the version that introduces their dependency.
 
-### `1.0.0-alpha.2`: Sync and Storage Consolidation
+### 1.5.0 — Stage Domain + Cross-Source Fusion
 
-- Status: ready for prerelease tagging from the current `main` commit.
-- Added bounded retry for `offline_fallback` / `no_data` startup-sync
-  results on the Python side (TypeScript already had it).
-- Added post-download zip integrity validation for the storyjson Release
-  asset on the TypeScript side (Python already had it).
-- Normalize release metadata, cache freshness, and fallback decisions.
-- Decide which datasets remain zip-backed at runtime and which are extracted.
-- Verify Docker and npm bundled fallback data through CI package inspection.
+**Main: stage data domain**
+- `list_stages(chapter?, type?)` — list stages (main story / activity).
+- `get_stage_info(stage_id)` — stage details: map, waves, enemy roster.
+- `search_stages(pattern)` — regex search across stage names and tags.
 
-### `1.0.0-beta.1`: Behavior Freeze
+**Cross-source fusion (depends on stage data)**
+- `get_stage_enemies(stage_id)` — enemies in that stage with **stage-specific**
+  stats (not the level-0 default exposed by `get_enemy_info`).
+- `get_enemy_appearances(name)` — reverse lookup: which stages feature this enemy.
+- `get_enemy_info(name)` gains an optional `stage_id` parameter that returns
+  stats for that stage's level variant.
 
-- Freeze the public tool list and core response formats for 1.0.
-- Add migration notes from the 0.x line.
-- Expand cross-implementation fixture tests.
+### 1.6.0 — Item/Material Domain + Story Character Tracking
 
-### `1.0.0`: Stable Release
+**Main: item data domain**
+- `list_items(category?)` — items grouped by category (materials, devices,
+  chips, etc.).
+- `get_item_info(name)` — item details: usage, obtain methods.
+- `search_items(pattern)` — regex search.
 
-- Publish Python and TypeScript 1.0 releases together.
-- Announce version alignment and compatibility rules.
-- Keep later 1.0.x releases focused on bug fixes and documentation.
+**Story character tracking (no new data source — indexes existing story JSON)**
+- `find_character_appearances(name, scope?)` — chapters / events where the
+  character speaks or is mentioned.
+- `find_speakers_in(event_id)` — every speaker who appears in an event.
 
-## 1.1.0 Added
+### 1.7.0 — Operator Depth (Building + Skins)
 
-- **Search tools** (`list_search_scopes`, `search_data`, `search_stories`):
-  full-text regex search across operator data and story dialogue, with filtering
-  by speaker, line type, and configurable context lines.
+**Main: building (base) skill data domain**
+- `get_operator_building_skills(name)` — base skills, efficiency, sloting.
+- `search_building_skills(building_type, pattern)` — cross-operator skill search.
 
-## 1.1.1 Fixed
+**Skins**
+- `get_operator_skins(name)` — skin list with descriptions.
 
-- **PRTS API investigation.** Systematic testing uncovered severe quality issues
-  in the two PRTS Wiki tools dating back to 0.1.0:
+### 1.8.0 — Wiki Enhancements + Recruitment
 
-  *`read_prts_page`*
-  - Used `action=query&prop=extracts&explaintext=1`. MediaWiki's `explaintext`
-    strips all template-rendered content. PRTS character pages are >99% template-
-    driven (infoboxes, skill tables, archive templates). Result: ~400 chars of
-    empty section headers for a page like "阿米娅".
-  - **Fix**: switched to `action=parse&prop=text`, which returns fully rendered
-    HTML. After HTML-tag stripping and CSS/JS removal, "阿米娅" yields 22K+ chars
-    of readable text covering all sections (attributes, talents, skills, archives).
+**Main: PRTS Wiki enhancements (group B in one release)**
+- `get_prts_images(page_title)` — image list via `prop=images`.
+- `resolve_prts_redirect(title)` — redirect resolution; addresses the
+  long-standing 1.1.1 "Known remaining issues" item.
 
-  *`search_prts`*
-  - No namespace filtering. Default MediaWiki search scans ALL namespaces,
-    returning technical data pages (JSON-like spine data, Lua module dumps)
-    mixed with real articles.
-  - Snippets contained raw HTML entities (`&quot;`, `&#039;`) and wikitext
-    template parameter syntax (`|名称=xxx`).
-  - **Fix**: added `srnamespace=0` (main namespace only), HTML entity decoding,
-    and residual-wikitext snippet cleanup.
+**Recruitment**
+- `query_recruit_tags(tags)` — reverse lookup: which operators a given
+  tag combination can produce.
 
-  *Known remaining issues (PRTS Wiki structural, not our code)*
-  - PRTS puts auto-generated technical pages (`*/spine`) in the main namespace
-    (ns=0), so namespace filtering alone can't fully sanitise results.
-  - Redirect pages appear as search results without being resolved to their
-    targets (MediaWiki `list=search` does not auto-resolve redirects).
-  - Free-text snippets from MediaWiki's search index are inherently imprecise;
-    the only fully reliable way to identify a page's topic is to retrieve and
-    parse the rendered content via `action=parse`.
+---
 
-## 1.2.0 PRTS API Enhancement Candidates
+## Patch Line (1.x.y)
 
-Based on the 1.1.1 investigation, PRTS Wiki's MediaWiki API exposes significant
-capabilities beyond the current `search_prts` + `read_prts_page` pair. No
-decisions yet; this section captures what's possible.
+Patch releases roll out experience and infra improvements without introducing new tools. Each patch carries one or two changes; the binding to a specific minor version is illustrative — work flows through whichever patch window is open.
 
-*Categories and navigation*
-- `prop=categories` on `action=parse` returns page categories. PRTS categorises
-  pages under labels like "干员", "敌方", "阵营", "势力", "物品". Category-driven
-  queries would let agents discover related pages precisely.
-- `prop=links` / `prop=backlinks` would allow graph traversal — e.g. from a
-  character page to all pages that reference that character.
+| Tentative | Theme | Scope |
+|-----------|-------|-------|
+| 1.5.1 | Search unification (Phase 1) | New `search(scope, pattern, ...)` consolidating `search_data`/`search_stories`/`search_enemies`/`list_search_scopes`. Legacy names preserved as deprecated aliases. |
+| 1.5.2 | Pagination format | Standard `{total, offset, limit, items}` shape across list tools. |
+| 1.6.1 | Structured errors | `{error_code, message}` alongside the legacy string fallback. |
+| 1.6.2 | PRTS page unification (Phase 1) | New `prts_page(page_title, action="read\|sections\|categories\|links\|template", ...)` consolidating five `*_prts_*`/`*_prts_page` tools. Legacy names kept and deprecated. |
+| 1.6.3 | Tool description optimization | Add keyword-rich descriptions and typical-use examples to all tools. Improves recall for client-side tool search / RAG (Claude Code, Cursor). Server-side, zero protocol risk. |
+| 1.7.1 | Shared fixtures | Cross-implementation fixture/golden-test infra. |
+| 1.7.2 | Golden tests | Python/TS byte-equal output tests over shared inputs. |
+| 1.7.3 | Developer docs | Data architecture diagram + new-domain onboarding guide. |
 
-*Structured sections*
-- `action=parse&prop=sections` returns a table of contents with section indices,
-  levels, and byte offsets. Combined with `action=parse&section=N`, agents could
-  read specific sections (e.g. "天赋", "档案") without fetching the entire page.
-- This would enable tools like `read_prts_page_section(title, section_index)` or
-  `list_prts_page_sections(title)`.
+These improvements are additive and back-compat. None of them are gating for the corresponding minor release; they just track natural delivery windows.
 
-*Search quality*
-- `srwhat=title` could power an exact-title lookup mode. Combined with
-  `srredirects=1`, searches could resolve redirects transparently.
-- `srinfo=totalhits` would give agents a sense of result volume before paginating.
-- Pre-filtering known technical page patterns (e.g. titles ending in `/spine`,
-  `/data`, `Widget:`) could further clean results client-side.
+---
 
-*Template data extraction*
-- PRTS infobox data lives in raw wikitext templates (`{{干员信息|...}}`).
-  `action=parse&prop=parsetree` returns a structured parse tree that could be
-  mined for key-value pairs. This is complex but would yield machine-readable
-  structured data without relying on external ArknightsGameData JSON files.
+## 2.0 Boundary Changes
 
-## 1.2.0 Added
+Three structural shifts that warrant a major bump.
 
-- **Story summary tools** (`get_event_summary`, `get_story_summary`, enhanced
-  `list_stories`): chapter-by-chapter and event-level narrative overviews with
-  LLM-generated long summaries (5~7:1 per-chapter, 10:1 per-event). Three-tier
-  fallback ensures graceful degradation when LLM data is unavailable.
+### Tool surface consolidation (context budget)
 
-## 1.3.0: PRTS API Deep Integration
+The 1.x tool surface keeps growing (21 tools at 1.4.0, projected 30+ by 1.8.0). For long-context flagship models this is fine; for 128K-class models, every additional tool schema eats into the prompt budget and hurts tool-selection accuracy.
 
-Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG.md#130---2026-05-18) and [TS CHANGELOG](ts/CHANGELOG.md#130---2026-05-18).
+**Background**: MCP currently has no protocol-level support for deferred tool loading. Closed proposals: lazy hydration (#1978), lazyRegistration (#2376). Open drafts: tool-search query (#1821), token-bloat mitigations (#1576). Claude Code's ToolSearch is an Anthropic-API-level feature (`tool_reference` blocks), not portable to Cursor/Cline/Chatbox.
 
-### Added
+**Approach**: server-side consolidation by *schema shape*, not by data domain. Merge tools that share parameter structure and output shape; keep tools whose semantics genuinely differ. Estimated reduction: 21 → ~14 tools (about a third) without losing capability.
 
-- `list_prts_sections(page_title)` — section table of contents
-- `get_prts_categories(page_title)` — page category tags
-- `get_prts_links(page_title, direction, limit)` — outbound/inbound links
+**Phase 1 (within 1.x, deprecated aliases)**:
 
-### Changed
+- `search(scope, pattern, ...)` consolidates `search_data`,
+  `search_stories`, `search_enemies`, `list_search_scopes`. Same
+  parameter shape across all four; differs only in `scope`. (1.5.1)
+- `prts_page(page_title, action, ...)` consolidates `read_prts_page`,
+  `list_prts_sections`, `get_prts_categories`, `get_prts_links`,
+  `get_prts_template`. Single primary key; action selects the
+  sub-operation. (1.6.2)
 
-- `read_prts_page` — new `section_index` parameter
-- `search_prts` — new `search_mode`, `filter_technical`; returns `totalhits`
+**Phase 2 (2.0)**: drop the deprecated aliases. The legacy names remain available throughout 1.x for migration headroom.
 
-### Delivered in 1.4.0
+**What we explicitly will NOT consolidate**:
 
-- Template data extraction (`prop=parsetree`) — see 1.4.0 section below.
+- Operator triplet (`get_operator_archives` / `voicelines` /
+  `basic_info`): outputs differ in shape and length; merging hurts
+  LLM selection accuracy more than it saves context.
+- Enemy triplet (`list_enemies` / `get_enemy_info` / `search_enemies`):
+  same reason.
+- Story tools (`read_story` / `read_activity` / `get_event_summary`):
+  genuinely distinct actions on related-but-different data.
 
-## 1.4.0: Template Extraction + Enemy Handbook
+The bar for consolidation: same parameter shape, similar output length and structure, an LLM choosing between them today is choosing between near-synonyms.
 
-Delivered in both Python and TypeScript. See [Python CHANGELOG](python/CHANGELOG.md#140---2026-05-19) and [TS CHANGELOG](ts/CHANGELOG.md#140---2026-05-19).
+### Output format becomes selectable
 
-### Added
+- Add an optional `output_format=markdown|json` parameter (default
+  `markdown` in 1.x — additive, no break).
+- JSON mode returns structured objects suitable for downstream
+  automation.
+- 2.0 flips the **default** to `json`, making this the breaking change.
+- Markdown remains supported under explicit opt-in.
 
-- `get_prts_template(page_title)` — structured key-value extraction from PRTS
-  Wiki templates via `action=parse&prop=parsetree`. Top-level templates only;
-  nested templates inside values are stripped.
-- `list_enemies(threat_level, limit, offset, full)` — paginated enemy handbook
-  listing with threat-level filter (boss/elite/normal).
-- `get_enemy_info(name)` — handbook entry merged with combat stats from
-  `enemy_database.json` (HP/ATK/DEF/RES, immunities, skills with blackboard
-  parameters).
-- `search_enemies(pattern, max_results)` — regex search across enemy names,
-  descriptions, and abilities.
+This staged migration lets users opt into JSON during 1.x and gives ample lead time before the default flips.
 
-### Notes
+### Implementation parity (Python ↔ TypeScript)
 
-- Enemy data is local JSON only — no PRTS Wiki API rate-limit cost.
-- `enemy_database.json` lives at `levels/enemydata/`; loaded on demand and
-  cleared together with operator caches after a successful sync.
+Today the implementations have de-facto roles: Python is recommended for Docker / stdio, TypeScript for `npm install -g` / HTTP. 2.0 removes this asymmetry:
 
-## Next
+- Both implementations support stdio **and** Streamable HTTP.
+- npm and PyPI packages have equivalent capability surface.
+- Environment variable names and defaults are unified.
+- Recommended deployment scenarios collapse into "use whichever runtime
+  fits your stack".
 
-Possible directions for 1.5.0 — items / stages, additional PRTS Wiki
-enhancements. Scope TBD.
+### Cleanup
+
+- Drop any 0.x-compat shims that survive into late 1.x.
+- Drop the deprecated tool aliases introduced in 1.5.1 / 1.6.2 (see
+  consolidation section above).
+
+### 2.0 Non-Goals
+
+- Not rewriting the MCP protocol layer.
+- Not introducing new transports beyond stdio + HTTP.
+- Not breaking data-sync semantics.
+- **Not implementing a custom deferred-tool-loading scheme.** If MCP
+  spec standardizes one (e.g. SEP-1821 merges), we adopt it; otherwise
+  consolidation + description optimization is our answer.
+
+---
+
+## Decision Principles
+
+1. **One data domain per minor release** — easier to communicate, easier
+   to migrate, easier to roll back.
+2. **Patches don't add new capability surface** — they fix bugs, improve
+   experience, and may introduce *consolidation aliases* whose semantics
+   are already covered by existing tools. They never add a genuinely new
+   capability.
+3. **Lead the breaking change by a year** — 2.0's `output_format` flip
+   and tool-alias removal are prepared throughout 1.x, not announced at
+   the last minute.
+4. **Bind cross-source fusion to its data dependency** — `get_stage_enemies`
+   ships with stages, not before.
+5. **Consolidate by schema shape, not by domain** — merging tools that
+   share parameter structure preserves selection accuracy; merging by
+   "everything operator-related" doesn't.
+
+---
 
 ## Detailed Plans
 

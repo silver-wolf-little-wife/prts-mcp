@@ -27,8 +27,7 @@ utils/                ←  跨领域纯函数（wikitext 清洗等）
 config.py/ts          ←  路径解析、环境变量
 ```
 
-**允许的依赖方向**：`server → api, data, config` / `data → stores, utils, config` / `api → utils`。
-**禁止**：`stores` 依赖 `data`；`utils` 依赖 `api` 或 `data`；`config` 依赖任何其他模块。
+**允许的依赖方向**：`server → api, data, config` / `data → stores, utils, config` / `api → utils`。 **禁止**：`stores` 依赖 `data`；`utils` 依赖 `api` 或 `data`；`config` 依赖任何其他模块。
 
 ### 抽象层
 
