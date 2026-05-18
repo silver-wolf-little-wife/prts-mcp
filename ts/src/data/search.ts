@@ -9,7 +9,6 @@ import {
   getCharacterTable,
   getHandbookTable,
   getCharwordTable,
-  resolveCharId,
 } from "./operator.js";
 
 // Reuse types from operator.ts
@@ -75,7 +74,7 @@ export function searchOperatorData(pattern: string, maxResults = 30): string {
   // Build name → id and charId → voice entries index
   const nameToId = new Map<string, string>();
   for (const [cid, info] of Object.entries(ct)) {
-    if (info.name) nameToId.set(info.name, cid);
+    if (info.name && cid.startsWith("char_")) nameToId.set(info.name, cid);
   }
 
   const charidToVoices = new Map<string, CharwordEntry[]>();

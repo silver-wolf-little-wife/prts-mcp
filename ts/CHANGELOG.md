@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Operator name-to-ID collision.** `resolveCharId()` and `searchOperatorData()`
+  now filter to `char_*` entries only, preventing `trap_*` and `token_*` entries
+  from silently overwriting real operator IDs when they share the same Chinese
+  name. Fixes `get_operator_basic_info`, `get_operator_archives`,
+  `get_operator_voicelines`, and `search_data` for affected operators (阿米娅,
+  森蚺, 狮蝎, 佩佩, 断罪者, etc.).
+
 ## [1.3.0] - 2026-05-18
 
 ### Added
