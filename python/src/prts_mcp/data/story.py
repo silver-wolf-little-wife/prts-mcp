@@ -9,6 +9,7 @@ Zip internal layout (all paths prefixed with "zh_CN/"):
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -321,6 +322,8 @@ def read_activity_from_store(
     total = len(summaries)
 
     if page is not None:
+        if page < 1:
+            raise ValueError("page 参数必须 >= 1")
         start = (page - 1) * page_size
         end = start + page_size
         selected = summaries[start:end]
@@ -337,8 +340,8 @@ def read_activity_from_store(
             if not event_name:
                 event_name = chapter.event_name
             chapters.append(chapter)
-        except KeyError:
-            # Story file missing from zip — skip silently
+        except (KeyError, FileNotFoundError, json.JSONDecodeError):
+            # Story file missing or corrupt — skip silently
             pass
 
     return ActivityResult(
@@ -383,7 +386,7 @@ def search_stories(
     a ZipStore from *zip_path*.
     """
     return search_stories_from_store(
-        ZipStore(zip_path),
+        _story_store(zip_path),
         pattern,
         character=character,
         line_type=line_type,
@@ -465,9 +468,7 @@ def search_stories_from_store(
                 chapter = read_story_from_store(
                     store, story_key, include_narration=True,
                 )
-            except KeyError:
-                continue
-            except Exception:
+            except (KeyError, FileNotFoundError, json.JSONDecodeError):
                 continue
 
             for i, line in enumerate(chapter.lines):
@@ -531,7 +532,7 @@ def get_event_summary(zip_path: Path, event_id: str) -> str:
 
     Convenience wrapper around get_event_summary_from_store.
     """
-    return get_event_summary_from_store(ZipStore(zip_path), event_id)
+    return get_event_summary_from_store(_story_store(zip_path), event_id)
 
 
 def get_event_summary_from_store(store: JsonStore, event_id: str) -> str:
@@ -612,7 +613,7 @@ def get_story_summary(zip_path: Path, story_key: str) -> str:
 
     Convenience wrapper around get_story_summary_from_store.
     """
-    return get_story_summary_from_store(ZipStore(zip_path), story_key)
+    return get_story_summary_from_store(_story_store(zip_path), story_key)
 
 
 def get_story_summary_from_store(store: JsonStore, story_key: str) -> str:

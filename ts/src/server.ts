@@ -794,6 +794,51 @@ app.use(express.json());
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
+const SESSION_IDLE_TIMEOUT_MS = (() => {
+  const raw = process.env["SESSION_IDLE_TIMEOUT_MS"];
+  if (raw === undefined) return 30 * 60 * 1000;
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  return -1;
+})();
+
+interface SessionMeta {
+  transport: StreamableHTTPServerTransport;
+  lastActivity: number;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
+const sessionMeta = new Map<string, SessionMeta>();
+
+function touchSession(id: string): void {
+  if (SESSION_IDLE_TIMEOUT_MS <= 0) return;
+  const meta = sessionMeta.get(id);
+  if (!meta) return;
+  meta.lastActivity = Date.now();
+}
+
+function scheduleSessionTimeout(id: string): void {
+  if (SESSION_IDLE_TIMEOUT_MS <= 0) return;
+  const meta = sessionMeta.get(id);
+  if (!meta) return;
+
+  if (meta.timer) clearTimeout(meta.timer);
+
+  meta.timer = setTimeout(() => {
+    const m = sessionMeta.get(id);
+    if (!m) return;
+    const idleMs = Date.now() - m.lastActivity;
+    if (idleMs >= SESSION_IDLE_TIMEOUT_MS) {
+      log("INFO", `Session ${id} idle for ${Math.round(idleMs / 1000)}s — evicting.`);
+      try { m.transport.close(); } catch { /* best-effort */ }
+      transports.delete(id);
+      sessionMeta.delete(id);
+    } else {
+      scheduleSessionTimeout(id);
+    }
+  }, SESSION_IDLE_TIMEOUT_MS);
+}
+
 app.all("/mcp", async (req, res) => {
   const sessionId = req.headers["mcp-session-id"] as string | undefined;
   let transport = sessionId ? transports.get(sessionId) : undefined;
@@ -803,12 +848,17 @@ app.all("/mcp", async (req, res) => {
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {
         transports.set(id, newTransport);
+        sessionMeta.set(id, { transport: newTransport, lastActivity: Date.now() });
+        scheduleSessionTimeout(id);
         log("INFO", `Session ${id} initialized.`);
       },
     });
     newTransport.onclose = () => {
       if (newTransport.sessionId) {
+        const meta = sessionMeta.get(newTransport.sessionId);
+        if (meta?.timer) clearTimeout(meta.timer);
         transports.delete(newTransport.sessionId);
+        sessionMeta.delete(newTransport.sessionId);
         log("INFO", `Session ${newTransport.sessionId} closed.`);
       }
     };
@@ -821,6 +871,11 @@ app.all("/mcp", async (req, res) => {
       return;
     }
     transport = newTransport;
+  }
+
+  // Update idle timer on each request
+  if (sessionId) {
+    touchSession(sessionId);
   }
 
   // Pass req.body explicitly so the transport uses the already-parsed body

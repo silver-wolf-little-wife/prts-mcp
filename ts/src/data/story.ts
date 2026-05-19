@@ -334,6 +334,7 @@ export function readActivityFromStore(
   let selected: ChapterSummary[];
   let hasMore: boolean;
   if (page !== undefined) {
+    if (page < 1) throw new Error("page 参数必须 >= 1");
     const start = (page - 1) * pageSize;
     const end = start + pageSize;
     selected = summaries.slice(start, end);
@@ -350,8 +351,10 @@ export function readActivityFromStore(
       const chapter = readStoryFromStore(store, summary.storyKey, includeNarration);
       if (!eventName) eventName = chapter.eventName;
       chapters.push(chapter);
-    } catch (error) {
-      console.warn(`Skipping unreadable chapter "${summary.storyKey}":`, error);
+    } catch (err) {
+      if (err instanceof SyntaxError) { /* corrupt JSON */ }
+      else if (err instanceof Error && /not found/i.test(err.message)) { /* missing */ }
+      else throw err;
     }
   }
 
@@ -390,7 +393,7 @@ export function searchStories(
   eventId?: string,
 ): string {
   return searchStoriesFromStore(
-    new ZipStore(zipPath),
+    storyStore(zipPath),
     pattern,
     character,
     lineType,
@@ -466,8 +469,10 @@ export function searchStoriesFromStore(
       let chapter: StoryChapter;
       try {
         chapter = readStoryFromStore(store, d.storyTxt, true);
-      } catch {
-        continue;
+      } catch (err) {
+        if (err instanceof SyntaxError) continue;
+        if (err instanceof Error && /not found/i.test(err.message)) continue;
+        throw err;
       }
 
       for (let i = 0; i < chapter.lines.length; i++) {
@@ -532,7 +537,7 @@ export function searchStoriesFromStore(
  * Convenience wrapper around getEventSummaryFromStore.
  */
 export function getEventSummary(zipPath: string, eventId: string): string {
-  return getEventSummaryFromStore(new ZipStore(zipPath), eventId);
+  return getEventSummaryFromStore(storyStore(zipPath), eventId);
 }
 
 /**
@@ -620,7 +625,7 @@ export function getEventSummaryFromStore(store: JsonStore, eventId: string): str
  * Convenience wrapper around getStorySummaryFromStore.
  */
 export function getStorySummary(zipPath: string, storyKey: string): string {
-  return getStorySummaryFromStore(new ZipStore(zipPath), storyKey);
+  return getStorySummaryFromStore(storyStore(zipPath), storyKey);
 }
 
 /**

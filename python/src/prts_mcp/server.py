@@ -106,7 +106,7 @@ async def list_prts_sections(
     """
     try:
         sections = await _list_sections(page_title)
-    except ValueError as e:
+    except RuntimeError as e:
         return str(e)
     if not sections:
         return f"页面 '{page_title}' 没有章节目录。"
@@ -127,7 +127,7 @@ async def get_prts_categories(
     """
     try:
         cats = await _get_categories(page_title)
-    except ValueError as e:
+    except RuntimeError as e:
         return str(e)
     if not cats:
         return f"页面 '{page_title}' 没有分类标签。"
@@ -149,7 +149,7 @@ async def get_prts_links(
         return "无效的 direction 参数，可选值：outbound、inbound。"
     try:
         result = await _get_links(page_title, direction=direction, limit=limit)
-    except ValueError as e:
+    except RuntimeError as e:
         return str(e)
     links = result["links"]
     if not links:
@@ -173,7 +173,7 @@ async def get_prts_template(
     """
     try:
         templates = await _get_template_data(page_title)
-    except ValueError as e:
+    except RuntimeError as e:
         return str(e)
     except Exception as e:
         return f"获取页面 '{page_title}' 的模板数据失败：{e}"

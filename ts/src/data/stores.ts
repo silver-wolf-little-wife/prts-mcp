@@ -70,13 +70,17 @@ export class DirectoryStore implements JsonStore {
 
 export class ZipStore implements JsonStore {
   readonly zipPath: string;
+  private _zip: AdmZip | null = null;
 
   constructor(zipPath: string) {
     this.zipPath = zipPath;
   }
 
   private zip(): AdmZip {
-    return new AdmZip(this.zipPath);
+    if (this._zip === null) {
+      this._zip = new AdmZip(this.zipPath);
+    }
+    return this._zip;
   }
 
   exists(path: string): boolean {
