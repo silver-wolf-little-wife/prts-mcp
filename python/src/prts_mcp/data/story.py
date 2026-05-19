@@ -340,8 +340,8 @@ def read_activity_from_store(
             if not event_name:
                 event_name = chapter.event_name
             chapters.append(chapter)
-        except KeyError:
-            # Story file missing from zip — skip silently
+        except (KeyError, FileNotFoundError, json.JSONDecodeError):
+            # Story file missing or corrupt — skip silently
             pass
 
     return ActivityResult(
@@ -386,7 +386,7 @@ def search_stories(
     a ZipStore from *zip_path*.
     """
     return search_stories_from_store(
-        ZipStore(zip_path),
+        _story_store(zip_path),
         pattern,
         character=character,
         line_type=line_type,
@@ -532,7 +532,7 @@ def get_event_summary(zip_path: Path, event_id: str) -> str:
 
     Convenience wrapper around get_event_summary_from_store.
     """
-    return get_event_summary_from_store(ZipStore(zip_path), event_id)
+    return get_event_summary_from_store(_story_store(zip_path), event_id)
 
 
 def get_event_summary_from_store(store: JsonStore, event_id: str) -> str:
@@ -613,7 +613,7 @@ def get_story_summary(zip_path: Path, story_key: str) -> str:
 
     Convenience wrapper around get_story_summary_from_store.
     """
-    return get_story_summary_from_store(ZipStore(zip_path), story_key)
+    return get_story_summary_from_store(_story_store(zip_path), story_key)
 
 
 def get_story_summary_from_store(store: JsonStore, story_key: str) -> str:

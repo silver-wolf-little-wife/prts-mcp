@@ -351,8 +351,10 @@ export function readActivityFromStore(
       const chapter = readStoryFromStore(store, summary.storyKey, includeNarration);
       if (!eventName) eventName = chapter.eventName;
       chapters.push(chapter);
-    } catch (error) {
-      console.warn(`Skipping unreadable chapter "${summary.storyKey}":`, error);
+    } catch (err) {
+      if (err instanceof SyntaxError) { /* corrupt JSON */ }
+      else if (err instanceof Error && /not found/i.test(err.message)) { /* missing */ }
+      else throw err;
     }
   }
 
