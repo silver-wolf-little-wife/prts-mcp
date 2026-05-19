@@ -66,20 +66,28 @@ class ZipStore:
 
     def __init__(self, zip_path: Path | str) -> None:
         self.zip_path = Path(zip_path)
+        self._zf: zipfile.ZipFile | None = None
+
+    def _zipfile(self) -> zipfile.ZipFile:
+        if self._zf is None:
+            self._zf = zipfile.ZipFile(self.zip_path)
+        return self._zf
 
     def exists(self, path: str) -> bool:
         inner_path = _normalize_path(path)
         if not self.zip_path.is_file():
             return False
-        with zipfile.ZipFile(self.zip_path) as zf:
-            return inner_path in zf.namelist()
+        try:
+            self._zipfile().getinfo(inner_path)
+            return True
+        except KeyError:
+            return False
 
     def read_text(self, path: str) -> str:
         inner_path = _normalize_path(path)
         try:
-            with zipfile.ZipFile(self.zip_path) as zf:
-                with zf.open(inner_path) as f:
-                    return f.read().decode("utf-8")
+            with self._zipfile().open(inner_path) as f:
+                return f.read().decode("utf-8")
         except KeyError as exc:
             raise FileNotFoundError(f"Dataset zip entry not found: {path}") from exc
 

@@ -11,7 +11,36 @@ import httpx
 from prts_mcp.config import PRTS_API_ENDPOINT, USER_AGENT, RATE_LIMIT_INTERVAL
 from prts_mcp.utils.sanitizer import strip_wikitext
 
-_last_request_time: float = 0.0
+# --- Shared httpx client (connection pooling) ---
+
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            headers={"User-Agent": USER_AGENT}, timeout=httpx.Timeout(15)
+        )
+    return _client
+
+
+# --- Rate limiting (slot-based — thread-safe for asyncio coroutines) ---
+
+_next_allowed_time: float = 0.0
+
+
+async def _rate_limit() -> None:
+    global _next_allowed_time
+    now = asyncio.get_event_loop().time()
+    slot = max(now, _next_allowed_time)
+    _next_allowed_time = slot + RATE_LIMIT_INTERVAL
+    wait = slot - now
+    if wait > 0:
+        await asyncio.sleep(wait)
+
+
+# --- Wikitext cleanup helpers ---
 
 # MediaWiki parser output contains inline CSS / JS blocks (charinfo font-face,
 # RLQ push snippets, etc.) that produce noise after tag stripping.
@@ -26,15 +55,6 @@ _CSS_JS_RE = re.compile(
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 _HTML_ENTITY_RE = re.compile(r"&#?[a-zA-Z0-9]+;")
-
-
-async def _rate_limit() -> None:
-    global _last_request_time
-    now = asyncio.get_event_loop().time()
-    elapsed = now - _last_request_time
-    if elapsed < RATE_LIMIT_INTERVAL:
-        await asyncio.sleep(RATE_LIMIT_INTERVAL - elapsed)
-    _last_request_time = asyncio.get_event_loop().time()
 
 
 _TECHNICAL_PAGE_PATTERNS = (
@@ -77,9 +97,11 @@ async def search_prts(
     }
     if srwhat:
         params["srwhat"] = srwhat
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-        resp = await client.get(PRTS_API_ENDPOINT, params=params)
+    try:
+        resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
         resp.raise_for_status()
+    except httpx.HTTPError:
+        return {"totalhits": 0, "results": []}
     data = resp.json()
     totalhits = data.get("query", {}).get("searchinfo", {}).get("totalhits", 0)
     results: list[dict] = []
@@ -125,9 +147,11 @@ async def read_page(title: str, section_index: int | None = None) -> str:
     }
     if section_index is not None:
         params["section"] = str(section_index)
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-        resp = await client.get(PRTS_API_ENDPOINT, params=params)
+    try:
+        resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
         resp.raise_for_status()
+    except httpx.HTTPError as e:
+        return f"读取页面失败：{e}"
     data = resp.json()
 
     error = data.get("error", {}).get("info", "")
@@ -154,13 +178,12 @@ async def list_sections(title: str) -> list[dict]:
         "prop": "sections",
         "format": "json",
     }
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-        resp = await client.get(PRTS_API_ENDPOINT, params=params)
-        resp.raise_for_status()
+    resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
+    resp.raise_for_status()
     data = resp.json()
     error = data.get("error", {}).get("info", "")
     if error:
-        raise ValueError(f"页面 '{title}' 未找到。")
+        raise RuntimeError(f"页面 '{title}' 未找到。")
     sections = data.get("parse", {}).get("sections", [])
     return [
         {
@@ -182,13 +205,12 @@ async def get_categories(title: str) -> list[str]:
         "prop": "categories",
         "format": "json",
     }
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-        resp = await client.get(PRTS_API_ENDPOINT, params=params)
-        resp.raise_for_status()
+    resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
+    resp.raise_for_status()
     data = resp.json()
     error = data.get("error", {}).get("info", "")
     if error:
-        raise ValueError(f"页面 '{title}' 未找到。")
+        raise RuntimeError(f"页面 '{title}' 未找到。")
     return [c["*"] for c in data.get("parse", {}).get("categories", [])]
 
 
@@ -210,13 +232,12 @@ async def get_links(
             "prop": "links",
             "format": "json",
         }
-        async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-            resp = await client.get(PRTS_API_ENDPOINT, params=params)
-            resp.raise_for_status()
+        resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
+        resp.raise_for_status()
         data = resp.json()
         error = data.get("error", {}).get("info", "")
         if error:
-            raise ValueError(f"页面 '{title}' 未找到。")
+            raise RuntimeError(f"页面 '{title}' 未找到。")
         all_links = [l["*"] for l in data.get("parse", {}).get("links", [])]
         return {
             "title": title,
@@ -237,9 +258,8 @@ async def get_links(
         "blnamespace": "0",
         "format": "json",
     }
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-        resp = await client.get(PRTS_API_ENDPOINT, params=params)
-        resp.raise_for_status()
+    resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
+    resp.raise_for_status()
     data = resp.json()
     backlinks = data.get("query", {}).get("backlinks", [])
     links = [bl["title"] for bl in backlinks]
@@ -273,18 +293,17 @@ async def get_template_data(title: str) -> dict:
         "prop": "parsetree",
         "format": "json",
     }
-    async with httpx.AsyncClient(headers={"User-Agent": USER_AGENT}, timeout=15) as client:
-        resp = await client.get(PRTS_API_ENDPOINT, params=params)
-        resp.raise_for_status()
+    resp = await _get_client().get(PRTS_API_ENDPOINT, params=params)
+    resp.raise_for_status()
     data = resp.json()
 
     error = data.get("error", {}).get("info", "")
     if error:
-        raise ValueError(f"页面 '{title}' 未找到。")
+        raise RuntimeError(f"页面 '{title}' 未找到。")
 
     xml_str = data.get("parse", {}).get("parsetree", {}).get("*", "")
     if not xml_str:
-        raise ValueError(f"页面 '{title}' 无 parsetree 数据。")
+        raise RuntimeError(f"页面 '{title}' 无 parsetree 数据。")
 
     root = ET.fromstring(xml_str)
     templates: dict[str, dict] = {}
@@ -300,6 +319,8 @@ async def get_template_data(title: str) -> dict:
             if sub.tag == "comment":
                 if sub.text:
                     comment_text = sub.text.strip()
+                if sub.tail:
+                    t_title_elem.text = (t_title_elem.text or "") + sub.tail
                 t_title_elem.remove(sub)
         t_name = (t_title_elem.text or "").strip()
         if not t_name:
@@ -316,6 +337,8 @@ async def get_template_data(title: str) -> dict:
 
             # Get full text of <value>, stripping any nested <template> children.
             for nested in list(value_el.findall("template")):
+                if nested.tail:
+                    value_el.text = (value_el.text or "") + nested.tail
                 value_el.remove(nested)
             val = (value_el.text or "").strip()
             if not val:
