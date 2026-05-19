@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-19
+
+### Fixed
+
+- **ZipStore zip instance caching.** `AdmZip` is now cached instead of
+  re-instantiated on every `exists()`/`readText()` call. In `search_stories`
+  without an `event_id` filter this was ~3000 redundant zip parses,
+  exceeding the 120 s MCP client timeout.
+- **Session memory leak.** `SESSION_IDLE_TIMEOUT_MS` (default 30 min)
+  evicts MCP transports left behind by clients that disconnect without
+  cleanly closing their session, preventing unbounded memory growth.
+- **Enemy blackboard parity.** Filter/slice order corrected to match
+  Python: slice first 6 entries, then filter null values.
+- **HTML entity decoding.** `String.fromCodePoint` replaces
+  `String.fromCharCode` for correct non-BMP Unicode handling. Named entity
+  table extended from 6 hardcoded replacements to a lookup table with
+  regex-based fallback for unrecognized entities.
+- **Story search robustness.** `read_activity` gains `page >= 1` validation.
+  Exception handling in `search_stories` and `read_activity` narrowed from
+  bare `catch {}` to expected error types. Convenience wrappers
+  (`searchStories`, `getEventSummary`, `getStorySummary`) now use
+  `storyStore()` for consistency.
+
+### Added
+
+- **E2E test suite.** MCP protocol-level test (`e2e.test.ts`) covering
+  handshake, tool surface (all 21 tools), operator data, and graceful
+  degradation when optional data is unavailable.
+
 ## [1.4.0] - 2026-05-19
 
 ### Added

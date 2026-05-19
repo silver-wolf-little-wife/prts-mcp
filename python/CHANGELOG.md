@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-19
+
+### Fixed
+
+- **ZipStore zip instance caching.** `ZipFile` is now cached instead of
+  re-opened on every `exists()`/`read_text()` call. `exists()` switches
+  from O(n) `namelist()` to O(1) `getinfo()`. In `search_stories` without
+  an `event_id` filter this was ~3000 redundant zip opens, exceeding the
+  120 s MCP client timeout.
+- **HTTP client reuse.** Module-level shared `httpx.AsyncClient` replaces
+  per-call instantiation (7 call sites), recovering connection pooling and
+  avoiding repeated TLS handshakes.
+- **Rate limiter race condition.** Slot-based reservation scheme (matching
+  the TS implementation) replaces the check-then-act pattern that could
+  allow concurrent coroutines to exceed the configured rate.
+- **Parsetree `.tail` preservation.** Text after nested `<comment>` and
+  `<template>` elements in title/value extraction is now preserved instead
+  of silently dropped.
+- **Story search robustness.** `read_activity` gains `page >= 1` validation.
+  Exception handling in `search_stories` and `read_activity` narrowed from
+  bare `except Exception` to expected error types. Convenience wrappers
+  (`search_stories`, `get_event_summary`, `get_story_summary`) now use
+  `_story_store()` for consistency.
+- **API error semantics.** `ValueError` replaced with `RuntimeError` for
+  MediaWiki API errors, matching the Python exception hierarchy convention.
+
+### Added
+
+- **E2E test suite.** MCP protocol-level test (`test_e2e.py`) covering
+  handshake, tool surface (all 21 tools), operator data, and graceful
+  degradation when optional data is unavailable.
+
 ## [1.4.0] - 2026-05-19
 
 ### Added
