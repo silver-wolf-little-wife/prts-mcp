@@ -9,6 +9,7 @@ Zip internal layout (all paths prefixed with "zh_CN/"):
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -321,6 +322,8 @@ def read_activity_from_store(
     total = len(summaries)
 
     if page is not None:
+        if page < 1:
+            raise ValueError("page 参数必须 >= 1")
         start = (page - 1) * page_size
         end = start + page_size
         selected = summaries[start:end]
@@ -465,9 +468,7 @@ def search_stories_from_store(
                 chapter = read_story_from_store(
                     store, story_key, include_narration=True,
                 )
-            except KeyError:
-                continue
-            except Exception:
+            except (KeyError, FileNotFoundError, json.JSONDecodeError):
                 continue
 
             for i, line in enumerate(chapter.lines):

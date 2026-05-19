@@ -59,16 +59,20 @@ const CSS_JS_RE =
 
 const HTML_TAG_RE = /<[^>]+>/g;
 
+const NAMED_ENTITIES: Record<string, string> = {
+  quot: '"', amp: "&", lt: "<", gt: ">", apos: "'", nbsp: " ",
+  mdash: "—", ndash: "–", hellip: "…",
+  lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”",
+  copy: "©", reg: "®", trade: "™",
+  times: "×", divide: "÷", plusmn: "±",
+  bull: "•", middot: "·", shy: "­",
+};
+
 function unescapeHTMLEntities(text: string): string {
   return text
-    .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#039;/g, "'")
-    .replace(/&nbsp;/g, " ");
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&([a-zA-Z]+);/g, (_, name) => NAMED_ENTITIES[name] ?? `&${name};`);
 }
 
 function cleanSnippet(snippet: string): string {

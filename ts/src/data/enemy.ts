@@ -298,8 +298,8 @@ function fmtStats(dbEntry: EnemyDbEntry): string {
       const bb = s.blackboard ?? [];
       if (bb.length > 0) {
         const bbStrs = bb
-          .filter((b) => b.value != null)
           .slice(0, 6)
+          .filter((b) => b.value != null)
           .map((b) => `${b.key}=${b.value}`);
         if (bbStrs.length > 0) parts.push(": " + bbStrs.join("，"));
       }
