@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-05-25
+
+### Fixed
+
+- **Session pool 400 on stale session ID.** When a client reuses a session ID
+  that was evicted by idle timeout or lost across server restart, the server
+  now returns a spec-compliant 404 (error code `-32002`) with an
+  LLM-actionable message instead of the previous 400 "Server not initialized".
+  Initialize requests with a stale session ID auto-recover (strip old ID,
+  treat as fresh handshake) — an intentional relaxation of MCP Streamable
+  HTTP §3.2 for clients that don't retry with a fresh handshake on error.
+
+### Changed
+
+- **Session idle timeout default extended** from 30 minutes to 24 hours,
+  reducing the chance of session eviction during normal interactive use.
+  Configurable via `SESSION_IDLE_TIMEOUT_MS` env var.
+- **Session idle timeout test** tightened to assert exact 404 status and
+  error code, plus a new sub-test for init auto-recovery path.
+
 ## [1.4.1] - 2026-05-19
 
 ### Fixed

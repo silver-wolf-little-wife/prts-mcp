@@ -89,16 +89,54 @@ test("idle sessions are evicted after timeout", async () => {
     // Wait for idle eviction (timeout is 2s, wait 4s)
     await new Promise((r) => setTimeout(r, 4000));
 
-    // Reuse old session — should get a new session or error
+    // --- non-init request with stale session → 404 JSON-RPC error ---
     const reuseRes = await fetch(origin + "/mcp", {
       method: "POST",
       headers: { "Content-Type": "application/json", "mcp-session-id": sessionId },
       body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 2 }),
     });
 
-    const reuseSessionId = reuseRes.headers.get("mcp-session-id");
-    assert.ok(reuseSessionId || reuseRes.status >= 400,
-      "reuse should get new session or error");
+    assert.equal(reuseRes.status, 404, "non-init stale session should return 404");
+    assert.equal(
+      reuseRes.headers.get("content-type")?.split(";")[0],
+      "application/json",
+    );
+    const reuseBody = await reuseRes.json() as Record<string, unknown>;
+    assert.equal(reuseBody.jsonrpc, "2.0", "should be valid JSON-RPC");
+    assert.equal(reuseBody.id, 2, "should preserve request id");
+    assert.ok(reuseBody.error, "should include error object");
+    const err = reuseBody.error as Record<string, unknown>;
+    assert.equal(err.code, -32002, "error code should be -32002");
+    assert.ok(
+      typeof err.message === "string" && err.message.includes("MCP session lost"),
+      "error message should mention session loss",
+    );
+
+    // --- initialize request with stale session → auto-recovery ---
+    const reinitRes = await fetch(origin + "/mcp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        "mcp-session-id": sessionId,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test-reinit", version: "1.0" },
+        },
+        id: 3,
+      }),
+    });
+
+    assert.equal(reinitRes.status, 200, "init with stale session should auto-recover");
+    assert.ok(reinitRes.ok, "initialize should succeed");
+    const newSessionId = reinitRes.headers.get("mcp-session-id");
+    assert.ok(newSessionId, "should return a new session ID");
+    assert.notEqual(newSessionId, sessionId, "new session ID should differ from old one");
 
     // Check eviction log
     const allStderr = stderrLines.join("");
