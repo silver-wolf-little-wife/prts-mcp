@@ -796,7 +796,7 @@ const transports = new Map<string, StreamableHTTPServerTransport>();
 
 const SESSION_IDLE_TIMEOUT_MS = (() => {
   const raw = process.env["SESSION_IDLE_TIMEOUT_MS"];
-  if (raw === undefined) return 30 * 60 * 1000;
+  if (raw === undefined) return 24 * 60 * 60 * 1000;
   const parsed = Number(raw);
   if (Number.isFinite(parsed) && parsed > 0) return parsed;
   return -1;
@@ -844,6 +844,38 @@ app.all("/mcp", async (req, res) => {
   let transport = sessionId ? transports.get(sessionId) : undefined;
 
   if (!transport) {
+    // Stale session ID: evicted by idle timeout or lost across restart.
+    // Per MCP Streamable HTTP spec §3.2, unrecognized session IDs MUST
+    // receive 404 regardless of request type.  We intentionally relax this
+    // for initialize requests: stripping the old ID and treating it as a
+    // fresh handshake gives broken/non-retrying clients (e.g. Chatbox) a
+    // zero-error recovery path.  Non-init requests get the spec-mandated
+    // 404 with an LLM-actionable message.
+    if (sessionId) {
+      const isInit =
+        req.method === "POST" &&
+        !Array.isArray(req.body) &&
+        req.body?.method === "initialize";
+      if (!isInit) {
+        log("INFO", `Session ${sessionId} not found; returning 404.`);
+        res.status(404).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32002,
+            message:
+              "MCP session lost (server may have restarted for data sync). " +
+              "Please ask the user to disconnect and reconnect the MCP server " +
+              "in the client settings — typically by toggling the MCP connection " +
+              "off and on, or restarting the client application.",
+          },
+          id: (req.body as Record<string, unknown> | undefined)?.id ?? null,
+        });
+        return;
+      }
+      delete req.headers["mcp-session-id"];
+      log("INFO", `Session ${sessionId} not found; allowing re-initialization.`);
+    }
+
     const newTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (id) => {

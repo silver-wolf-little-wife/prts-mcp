@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-05-25
+
+### Changed
+
+- **Version sync with TS 1.4.2.** No Python-side changes — the session pool
+  fix in this release applies only to the TypeScript Streamable HTTP transport.
+  Python's stdio transport is not affected by the stale-session issue.
+
 ## [1.4.1] - 2026-05-19
 
 ### Fixed

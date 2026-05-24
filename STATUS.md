@@ -1,13 +1,13 @@
 # PRTS-MCP 项目状态
 
-_Last updated: 2026-05-19_
+_Last updated: 2026-05-25_
 
 ## 当前版本
 
 | 实现 | 版本 | 状态 |
 |------|------|------|
-| Python | 1.4.1 | stable |
-| TypeScript | 1.4.1 | stable |
+| Python | 1.4.2 | stable |
+| TypeScript | 1.4.2 | stable |
 
 - 公共工具面：21 个 MCP 工具（1.x 冻结）
 - 兼容性合约：1.x 期间工具名和必填参数不变
