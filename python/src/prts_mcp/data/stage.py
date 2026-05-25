@@ -169,6 +169,8 @@ def list_stages(
     """List stages, optionally filtered by zone ID and/or stage type."""
     if limit < 1:
         return "limit 必须 >= 1。"
+    if limit > 200:
+        return "limit 必须 <= 200。"
     if offset < 0:
         return "offset 必须 >= 0。"
     if type is not None and type.upper() not in _STAGE_TYPE_LABELS:
@@ -208,8 +210,9 @@ def list_stages(
         zd = _zone_display(e.get("zoneId", ""))
         name = e.get("name") or "（无名）"
         code = e.get("code") or "?"
+        sid = e.get("stageId", "")
         lines.append(
-            f"- **{name}** [{t_label}] {code} — {d_label} — {zd}"
+            f"- **{name}** [{t_label}] {code} — {d_label} — {zd}（id: {sid}）"
         )
 
     start = offset + 1
@@ -295,6 +298,8 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
     """Regex search across stage names, codes, and descriptions."""
     if max_results < 1:
         return "max_results 必须 >= 1。"
+    if max_results > 100:
+        return "max_results 必须 <= 100。"
 
     try:
         regex = _re.compile(pattern, _re.IGNORECASE)
@@ -337,7 +342,8 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
         raw_desc = e.get("description") or ""
         cdesc = _clean_description(raw_desc)
 
-        lines.append(f"\n## {name} [{t_label}] {code}")
+        sid = e.get("stageId", "")
+        lines.append(f"\n## {name} [{t_label}] {code}（id: {sid}）")
         lines.append(f"- **区域**：{zd}")
         lines.append(f"- **难度**：{d_label}")
         lines.append(f"- **理智**：{ap}")

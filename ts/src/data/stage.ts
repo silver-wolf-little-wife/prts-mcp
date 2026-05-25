@@ -228,7 +228,8 @@ export function listStages(
     const zd = zoneDisplay(e.zoneId ?? "");
     const name = e.name || "（无名）";
     const code = e.code || "?";
-    lines.push(`- **${name}** [${tLabel}] ${code} — ${dLabel} — ${zd}`);
+    const sid = e.stageId ?? "";
+    lines.push(`- **${name}** [${tLabel}] ${code} — ${dLabel} — ${zd}（id: ${sid}）`);
   }
 
   const start = offset + 1;
@@ -344,7 +345,8 @@ export function searchStages(pattern: string, maxResults: number = 30): string {
     const ap = e.apCost ?? "?";
     const cdesc = cleanDescription(e.description ?? "");
 
-    lines.push(`\n## ${name} [${tLabel}] ${code}`);
+    const sid = e.stageId ?? "";
+    lines.push(`\n## ${name} [${tLabel}] ${code}（id: ${sid}）`);
     lines.push(`- **区域**：${zd}`);
     lines.push(`- **难度**：${dLabel}`);
     lines.push(`- **理智**：${ap}`);
