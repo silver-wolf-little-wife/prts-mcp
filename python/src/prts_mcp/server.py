@@ -280,7 +280,7 @@ def search_enemies(
 @mcp.tool()
 def list_stages(
     chapter: Annotated[str | None, Field(default=None, description="按所属章节（zoneId）过滤，如 'main_0'。不填则返回全部。")] = None,
-    type: Annotated[str | None, Field(default=None, description="按关卡类型过滤：MAIN（主线）/ ACTIVITY（活动）/ SUB（支线）/ DAILY（每日）/ CAMPAIGN（剿灭）/ CLIMB_TOWER（爬塔）。不填则返回全部。")] = None,
+    type: Annotated[str | None, Field(default=None, description="按关卡类型过滤：MAIN（主线）/ ACTIVITY（活动）/ SUB（支线）/ DAILY（每日）/ CAMPAIGN（剿灭）/ CLIMB_TOWER（爬塔）/ SPECIAL_STORY（特殊故事）/ GUIDE（教程）。不填则返回全部。")] = None,
     limit: Annotated[int, Field(default=50, description="返回数量上限，默认 50。")] = 50,
     offset: Annotated[int, Field(default=0, description="分页偏移量，默认 0。")] = 0,
 ) -> str:

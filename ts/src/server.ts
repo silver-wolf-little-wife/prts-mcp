@@ -335,7 +335,7 @@ function createMcpServer(): McpServer {
     ].join(" "),
     {
       chapter: z.string().optional().describe("按所属章节（zoneId）过滤，如 'main_0'。不填则返回全部。"),
-      type: z.string().optional().describe("按关卡类型过滤：MAIN（主线）/ ACTIVITY（活动）/ SUB（支线）/ DAILY（每日）/ CAMPAIGN（剿灭）/ CLIMB_TOWER（爬塔）。"),
+      type: z.string().optional().describe("按关卡类型过滤：MAIN（主线）/ ACTIVITY（活动）/ SUB（支线）/ DAILY（每日）/ CAMPAIGN（剿灭）/ CLIMB_TOWER（爬塔）/ SPECIAL_STORY（特殊故事）/ GUIDE（教程）。"),
       limit: z.number().int().min(1).max(200).default(50).describe("返回数量上限，默认 50。"),
       offset: z.number().int().min(0).default(0).describe("分页偏移量，默认 0。"),
     },

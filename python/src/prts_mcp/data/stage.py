@@ -237,7 +237,7 @@ def get_stage_info(stage_id: str) -> str:
     d_label = _difficulty_label(entry.get("difficulty", ""))
     zone_id = entry.get("zoneId", "")
     zd = _zone_display(zone_id)
-    ap = entry.get("apCost", "?")
+    ap = entry.get("apCost") or "?"
     danger = entry.get("dangerLevel") or "?"
     boss = entry.get("bossMark", False)
     raw_desc = entry.get("description") or ""
@@ -330,7 +330,7 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
         t_label = _stage_type_label(e.get("stageType", ""))
         d_label = _difficulty_label(e.get("difficulty", ""))
         zd = _zone_display(e.get("zoneId", ""))
-        ap = e.get("apCost", "?")
+        ap = e.get("apCost") or "?"
         raw_desc = e.get("description") or ""
         cdesc = _clean_description(raw_desc)
 

@@ -167,6 +167,36 @@ test("listStages type filter", async () => {
   assert.match(out, /共 1 个/);
 });
 
+test("listStages combined filter", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages("main_0", "MAIN", 50, 0);
+  assert.match(out, /坍塌/);
+  assert.match(out, /坍塌·突袭/);
+  assert.doesNotMatch(out, /测试活动关/);
+  assert.match(out, /共 2 个/);
+});
+
+test("listStages no match", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages("nonexistent", null, 50, 0);
+  assert.match(out, /没有匹配的关卡/);
+});
+
+test("listStages invalid offset", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages(null, null, 50, -1);
+  assert.match(out, /offset 必须 >= 0/);
+});
+
 test("listStages pagination hint", async () => {
   const root = tempGamedataRoot();
   process.env["GAMEDATA_PATH"] = root;
@@ -250,6 +280,24 @@ test("getStageInfo null levelId", async () => {
   assert.doesNotMatch(out, /关卡数据/);
 });
 
+test("getStageInfo empty description", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("act31side_01");
+  assert.match(out, /无描述/);
+});
+
+test("getStageInfo empty drops", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("act31side_01");
+  assert.match(out, /（无）/);
+});
+
 test("getStageInfo multi drops", async () => {
   const root = tempGamedataRoot();
   process.env["GAMEDATA_PATH"] = root;
@@ -300,6 +348,15 @@ test("searchStages by description", async () => {
   const stage = await loadStageModule();
   const out = stage.searchStages("先锋");
   assert.match(out, /坍塌/);
+});
+
+test("searchStages multiple matches", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages(".");
+  assert.match(out, /共 4 个/);
 });
 
 test("searchStages no match", async () => {

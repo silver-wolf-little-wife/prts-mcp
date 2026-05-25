@@ -30,6 +30,7 @@ GAMEDATA_FILES: tuple[str, ...] = (
     "zh_CN/gamedata/excel/charword_table.json",
     "zh_CN/gamedata/excel/story_review_table.json",
     "zh_CN/gamedata/excel/stage_table.json",
+    "zh_CN/gamedata/excel/zone_table.json",
 )
 
 _GITHUB_COMMITS_URL = "https://api.github.com/repos/{owner}/{repo}/commits/{branch}"
