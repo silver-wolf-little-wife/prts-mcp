@@ -30,6 +30,11 @@ from prts_mcp.data.enemy import (
     get_enemy_info as _get_enemy_info,
     search_enemies as _search_enemies,
 )
+from prts_mcp.data.stage import (
+    list_stages as _list_stages,
+    get_stage_info as _get_stage_info,
+    search_stages as _search_stages,
+)
 from prts_mcp.data.search import search_operator_data as _search_operator_data
 from prts_mcp.data.story import (
     list_story_events as _list_story_events,
@@ -270,6 +275,44 @@ def search_enemies(
     阵营或关键词相关的敌人信息。
     """
     return _search_enemies(pattern, max_results=max_results)
+
+
+@mcp.tool()
+def list_stages(
+    chapter: Annotated[str | None, Field(default=None, description="按所属章节（zoneId）过滤，如 'main_0'。不填则返回全部。")] = None,
+    type: Annotated[str | None, Field(default=None, description="按关卡类型过滤：MAIN（主线）/ ACTIVITY（活动）/ SUB（支线）/ DAILY（每日）/ CAMPAIGN（剿灭）/ CLIMB_TOWER（爬塔）/ SPECIAL_STORY（特殊故事）/ GUIDE（教程）。不填则返回全部。")] = None,
+    limit: Annotated[int, Field(default=50, description="返回数量上限，默认 50。")] = 50,
+    offset: Annotated[int, Field(default=0, description="分页偏移量，默认 0。")] = 0,
+) -> str:
+    """列出关卡列表，支持按章节和类型过滤。
+
+    返回格式：每行 `- **关卡名** [类型] 编号 — 难度 — 区域`。
+    获取 stage_id 后可传入 get_stage_info 查看详情。
+    """
+    return _list_stages(chapter=chapter, type=type, limit=limit, offset=offset)
+
+
+@mcp.tool()
+def get_stage_info(
+    stage_id: Annotated[str, Field(description="关卡 ID，如 'main_00-01'（可从 list_stages 获取）。")],
+) -> str:
+    """获取指定关卡的详细信息。
+
+    返回关卡的编号、类型、难度、所属区域、理智消耗、掉落奖励、解锁条件等。
+    """
+    return _get_stage_info(stage_id)
+
+
+@mcp.tool()
+def search_stages(
+    pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。例如 'H10'、'切尔诺伯格'。")],
+    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+) -> str:
+    """在关卡数据库中执行全文正则搜索。
+
+    搜索范围覆盖关卡名称、编号、描述。返回匹配关卡的基本信息块。
+    """
+    return _search_stages(pattern, max_results=max_results)
 
 
 @mcp.tool()
@@ -514,7 +557,11 @@ def list_search_scopes() -> str:
         "- operators：干员数据（名称、基本信息描述、档案文本、语音台词）\n"
         "  使用 search_data(scope=\"operators\") 搜索。\n"
         "- stories：剧情台词（对话、旁白、选项），按活动/章节组织，支持按角色和台词类型过滤。\n"
-        "  使用 search_stories 搜索。"
+        "  使用 search_stories 搜索。\n"
+        "- stages：关卡数据（名称、编号、描述、类型、掉落、解锁条件）。\n"
+        "  使用 list_stages / get_stage_info / search_stages 查询。\n"
+        "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n"
+        "  使用 list_enemies / get_enemy_info / search_enemies 查询。"
     )
 
 
@@ -643,6 +690,8 @@ def _run_startup_sync() -> None:
 
                 clear_operator_caches()
                 clear_enemy_caches()
+                from prts_mcp.data.stage import clear_stage_caches as _clear_stages
+                _clear_stages()
             return _sync_needs_retry(r.status)
 
         needs_retry = _run_initial_sync("Gamedata", _sync_gamedata)

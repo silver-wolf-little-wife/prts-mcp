@@ -1,0 +1,357 @@
+import { loadConfig } from "../config.js";
+import { DirectoryStore } from "./stores.js";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface StageEntry {
+  stageId?: string;
+  code?: string | null;
+  name?: string | null;
+  stageType?: string | null;
+  difficulty?: string | null;
+  zoneId?: string | null;
+  levelId?: string | null;
+  apCost?: number | null;
+  dangerLevel?: string | null;
+  description?: string | null;
+  stageDropInfo?: Record<string, unknown> | null;
+  unlockCondition?: { stageId: string; completeState: string }[] | null;
+  hardStagedId?: string | null;
+  sixStarStageId?: string | null;
+  bossMark?: boolean | null;
+}
+
+type StageTable = Record<string, StageEntry>;
+
+interface ZoneEntry {
+  zoneID?: string;
+  zoneNameFirst?: string | null;
+  zoneNameSecond?: string | null;
+}
+
+type ZoneTable = Record<string, ZoneEntry>;
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const STAGE_FILE = "stage_table.json";
+const ZONE_FILE = "zone_table.json";
+
+const STAGE_TYPE_LABELS: Record<string, string> = {
+  MAIN: "主线",
+  ACTIVITY: "活动",
+  SUB: "支线",
+  DAILY: "每日",
+  CAMPAIGN: "剿灭",
+  CLIMB_TOWER: "爬塔",
+  SPECIAL_STORY: "特殊故事",
+  GUIDE: "教程",
+};
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  NORMAL: "普通",
+  FOUR_STAR: "突袭",
+  SIX_STAR: "六星",
+};
+
+// ---------------------------------------------------------------------------
+// Module-level caches
+// ---------------------------------------------------------------------------
+
+let _stageTable: StageTable | null = null;
+let _zoneTable: ZoneTable | null = null;
+let _zoneTableFailed = false;
+
+export function clearStageCaches(): void {
+  _stageTable = null;
+  _zoneTable = null;
+  _zoneTableFailed = false;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function stageTypeLabel(t: string): string {
+  return STAGE_TYPE_LABELS[t] ?? t;
+}
+
+function difficultyLabel(d: string): string {
+  return DIFFICULTY_LABELS[d] ?? d;
+}
+
+function cleanDescription(desc: string): string {
+  if (!desc) return "";
+  return desc.replace(/<[^>]+>/g, "").trim();
+}
+
+function formatUnlock(conditions: { stageId: string; completeState: string }[] | null): string {
+  if (!conditions || conditions.length === 0) return "（无条件）";
+  const labels: Record<string, (sid: string) => string> = {
+    PASS: (sid) => `通关 ${sid}`,
+    STAR_3: (sid) => `三星通关 ${sid}`,
+  };
+  const parts = conditions.map((c) => {
+    const fn = labels[c.completeState] ?? ((s: string) => `${c.completeState} ${s}`);
+    return fn(c.stageId);
+  });
+  return parts.join("；");
+}
+
+function formatDrops(dropInfo: Record<string, unknown> | null | undefined): string {
+  if (!dropInfo) return "（无）";
+  const display = (dropInfo["displayRewards"] ?? []) as Record<string, unknown>[];
+  if (!Array.isArray(display) || display.length === 0) return "（无）";
+  const parts = display.map((d) => {
+    const name = d["type"] ?? d["dropType"] ?? "?";
+    const count = (d["count"] as number) ?? 1;
+    return `- ${name} ×${count}`;
+  });
+  return parts.length > 0 ? parts.join("\n") : "（无）";
+}
+
+// ---------------------------------------------------------------------------
+// Lazy loaders
+// ---------------------------------------------------------------------------
+
+function getStageTable(): StageTable {
+  if (_stageTable === null) {
+    const cfg = loadConfig();
+    if (!cfg.effectiveExcelPath) {
+      throw new Error("关卡数据暂不可用。请检查 GAMEDATA_PATH 配置。");
+    }
+    const store = new DirectoryStore(cfg.effectiveExcelPath);
+    if (!store.exists(STAGE_FILE)) {
+      throw new Error(`关卡数据文件不存在：${STAGE_FILE}`);
+    }
+    const raw = store.readJson<{ stages?: StageTable }>(STAGE_FILE);
+    if (!raw || typeof raw !== "object" || !raw.stages || typeof raw.stages !== "object") {
+      throw new Error(`${STAGE_FILE} 格式异常`);
+    }
+    _stageTable = raw.stages;
+  }
+  return _stageTable;
+}
+
+function getZoneTable(): ZoneTable | null {
+  if (_zoneTable === null && !_zoneTableFailed) {
+    const cfg = loadConfig();
+    if (!cfg.effectiveExcelPath) {
+      _zoneTableFailed = true;
+      return null;
+    }
+    const store = new DirectoryStore(cfg.effectiveExcelPath);
+    if (!store.exists(ZONE_FILE)) {
+      _zoneTableFailed = true;
+      return null;
+    }
+    const raw = store.readJson<{ zones?: ZoneTable }>(ZONE_FILE);
+    if (!raw || typeof raw !== "object" || !raw.zones || typeof raw.zones !== "object") {
+      _zoneTableFailed = true;
+      return null;
+    }
+    _zoneTable = raw.zones;
+  }
+  return _zoneTable;
+}
+
+function zoneDisplay(zoneId: string): string {
+  const zones = getZoneTable();
+  if (!zones) return zoneId;
+  const z = zones[zoneId];
+  if (!z) return zoneId;
+  const first = z.zoneNameFirst || "";
+  const second = z.zoneNameSecond || "";
+  if (first && second) return `${first}-${second}`;
+  if (first) return first;
+  return zoneId;
+}
+
+function missingDataMessage(): string {
+  return (
+    "关卡数据暂不可用。请检查 GAMEDATA_PATH 配置，" +
+    "或等待服务器自动从 GitHub Release 同步数据完成后重试。"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export function listStages(
+  chapter?: string | null,
+  type?: string | null,
+  limit: number = 50,
+  offset: number = 0,
+): string {
+  if (limit < 1) return "limit 必须 >= 1。";
+  if (offset < 0) return "offset 必须 >= 0。";
+  if (type != null && !(type.toUpperCase() in STAGE_TYPE_LABELS)) {
+    const allowed = Object.keys(STAGE_TYPE_LABELS).join("、");
+    return `无效的 type：${JSON.stringify(type)}。可选值：${allowed}。`;
+  }
+
+  let stages: StageTable;
+  try {
+    stages = getStageTable();
+  } catch (e) {
+    return missingDataMessage() + `（${e instanceof Error ? e.message : String(e)}）`;
+  }
+
+  const filtered: StageEntry[] = [];
+  for (const [sid, entry] of Object.entries(stages).sort(([a], [b]) => a.localeCompare(b))) {
+    if (chapter != null && entry.zoneId !== chapter) continue;
+    if (type != null && entry.stageType !== type.toUpperCase()) continue;
+    filtered.push(entry);
+  }
+
+  const total = filtered.length;
+  const page = filtered.slice(offset, offset + limit);
+
+  if (page.length === 0) {
+    if (total === 0) {
+      const filters: string[] = [];
+      if (chapter) filters.push(`zoneId=${chapter}`);
+      if (type) filters.push(`stageType=${type.toUpperCase()}`);
+      return `没有匹配的关卡（filter: ${filters.join(", ") || "none"}）。`;
+    }
+    return `offset ${offset} 超出范围（共 ${total} 条）。`;
+  }
+
+  const lines = [`# 关卡列表（共 ${total} 个）`];
+  for (const e of page) {
+    const tLabel = stageTypeLabel(e.stageType ?? "");
+    const dLabel = difficultyLabel(e.difficulty ?? "");
+    const zd = zoneDisplay(e.zoneId ?? "");
+    const name = e.name || "（无名）";
+    const code = e.code || "?";
+    const sid = e.stageId ?? "";
+    lines.push(`- **${name}** [${tLabel}] ${code} — ${dLabel} — ${zd}（id: ${sid}）`);
+  }
+
+  const start = offset + 1;
+  const end = Math.min(offset + limit, total);
+  lines.push(
+    `\n（显示第 ${start}–${end} 条，共 ${total} 条。` +
+    `使用 offset=${offset + limit} 查看下一页）`,
+  );
+  return lines.join("\n");
+}
+
+export function getStageInfo(stageId: string): string {
+  let stages: StageTable;
+  try {
+    stages = getStageTable();
+  } catch (e) {
+    return missingDataMessage() + `（${e instanceof Error ? e.message : String(e)}）`;
+  }
+
+  const entry = stages[stageId];
+  if (!entry) return `未找到关卡：${JSON.stringify(stageId)}。`;
+
+  const name = entry.name || "（无名）";
+  const code = entry.code || "?";
+  const tLabel = stageTypeLabel(entry.stageType ?? "");
+  const dLabel = difficultyLabel(entry.difficulty ?? "");
+  const zd = zoneDisplay(entry.zoneId ?? "");
+  const ap = entry.apCost ?? "?";
+  const danger = entry.dangerLevel || "?";
+  const boss = entry.bossMark === true;
+  const rawDesc = entry.description || "";
+  const desc = cleanDescription(rawDesc) || "（无描述）";
+  const drops = entry.stageDropInfo as Record<string, unknown> | null | undefined;
+  const unlocks = entry.unlockCondition ?? [];
+  const hardId = entry.hardStagedId;
+  const levelId = entry.levelId;
+
+  const parts: string[] = [`# ${name} — 关卡详情`, "", "## 基本信息"];
+  parts.push(`- **ID**：${stageId}`);
+  parts.push(`- **编号**：${code}`);
+  parts.push(`- **类型**：${tLabel}`);
+  parts.push(`- **难度**：${dLabel}`);
+  parts.push(`- **所属区域**：${zd}`);
+  parts.push(`- **理智消耗**：${ap}`);
+  parts.push(`- **危险等级**：${danger}`);
+  if (boss) parts.push("- **BOSS标记**：是");
+  if (levelId) parts.push(`- **关卡数据**：${levelId}`);
+
+  parts.push("", "## 描述", desc);
+  parts.push("", "## 掉落信息", formatDrops(drops));
+  parts.push("", "## 解锁条件", formatUnlock(unlocks));
+
+  parts.push("", "## 关联关卡");
+  if (hardId) {
+    const hEntry = stages[hardId];
+    const hName = hEntry?.name;
+    parts.push(`- 突袭模式：${hardId}` + (hName ? `（${hName}）` : ""));
+  } else {
+    parts.push("- 突袭模式：无");
+  }
+  const ssid = entry.sixStarStageId;
+  if (ssid) {
+    const sEntry = stages[ssid];
+    const sName = sEntry?.name;
+    parts.push(`- 六星模式：${ssid}` + (sName ? `（${sName}）` : ""));
+  }
+
+  return parts.join("\n");
+}
+
+export function searchStages(pattern: string, maxResults: number = 30): string {
+  if (maxResults < 1) return "max_results 必须 >= 1。";
+
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern, "i");
+  } catch (e) {
+    return `正则表达式无效：${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  let stages: StageTable;
+  try {
+    stages = getStageTable();
+  } catch (e) {
+    return missingDataMessage() + `（${e instanceof Error ? e.message : String(e)}）`;
+  }
+
+  const matched: StageEntry[] = [];
+  for (const [, entry] of Object.entries(stages).sort(([a], [b]) => a.localeCompare(b))) {
+    const searchText =
+      (entry.name ?? "") +
+      " " +
+      (entry.code ?? "") +
+      " " +
+      cleanDescription(entry.description ?? "") +
+      " " +
+      (entry.stageType ?? "");
+    if (regex.test(searchText)) {
+      matched.push(entry);
+      if (matched.length >= maxResults) break;
+    }
+  }
+
+  if (matched.length === 0) return `未找到匹配 '${pattern}' 的关卡。`;
+
+  const lines = [`# 搜索结果：${pattern}（共 ${matched.length} 个）`];
+  for (const e of matched) {
+    const name = e.name || "（无名）";
+    const code = e.code || "?";
+    const tLabel = stageTypeLabel(e.stageType ?? "");
+    const dLabel = difficultyLabel(e.difficulty ?? "");
+    const zd = zoneDisplay(e.zoneId ?? "");
+    const ap = e.apCost ?? "?";
+    const cdesc = cleanDescription(e.description ?? "");
+
+    const sid = e.stageId ?? "";
+    lines.push(`\n## ${name} [${tLabel}] ${code}（id: ${sid}）`);
+    lines.push(`- **区域**：${zd}`);
+    lines.push(`- **难度**：${dLabel}`);
+    lines.push(`- **理智**：${ap}`);
+    if (cdesc) lines.push(`- **描述**：${cdesc.slice(0, 120)}${cdesc.length > 120 ? "..." : ""}`);
+  }
+
+  return lines.join("\n");
+}
