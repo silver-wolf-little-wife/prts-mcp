@@ -1,0 +1,330 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+function tempGamedataRoot(): string {
+  return mkdtempSync(join(tmpdir(), "prts-stage-test-"));
+}
+
+async function loadStageModule(): Promise<typeof import("../src/data/stage.js")> {
+  return import(`../src/data/stage.ts?cacheBust=${Date.now()}-${Math.random()}`);
+}
+
+const SENTINEL_FILES = [
+  "character_table.json",
+  "handbook_info_table.json",
+  "charword_table.json",
+  "story_review_table.json",
+];
+
+function writeFixtures(root: string): void {
+  const excel = join(root, "zh_CN", "gamedata", "excel");
+  mkdirSync(excel, { recursive: true });
+
+  for (const f of SENTINEL_FILES) {
+    writeFileSync(join(excel, f), "{}", "utf-8");
+  }
+
+  const stages = {
+    stages: {
+      "main_00-01": {
+        stageId: "main_00-01",
+        code: "0-1",
+        name: "坍塌",
+        stageType: "MAIN",
+        difficulty: "NORMAL",
+        zoneId: "main_0",
+        levelId: "Obt/Main/level_main_00-01",
+        apCost: 6,
+        dangerLevel: "LV.1",
+        description: "三点方向出现了敌人的先锋部队。",
+        stageDropInfo: {
+          displayRewards: [{ type: "TKT_RECRUIT", id: "7001", dropType: "ONCE" }],
+        },
+        unlockCondition: [],
+        hardStagedId: "main_00-01#f#",
+        bossMark: false,
+      },
+      "main_00-01#f#": {
+        stageId: "main_00-01#f#",
+        code: "TR-1",
+        name: "坍塌·突袭",
+        stageType: "MAIN",
+        difficulty: "FOUR_STAR",
+        zoneId: "main_0",
+        levelId: "Obt/Main/level_main_00-01",
+        apCost: 9,
+        dangerLevel: "LV.2",
+        description: "<@lv.fs>突袭条件</>：敌方生命值提升。",
+        stageDropInfo: null,
+        unlockCondition: [{ stageId: "main_00-01", completeState: "STAR_3" }],
+        hardStagedId: null,
+        bossMark: true,
+      },
+      "act31side_01": {
+        stageId: "act31side_01",
+        code: "AS-1",
+        name: "测试活动关",
+        stageType: "ACTIVITY",
+        difficulty: "NORMAL",
+        zoneId: "act31side_zone1",
+        levelId: null,
+        apCost: 12,
+        dangerLevel: "NORMAL",
+        description: "",
+        stageDropInfo: { displayRewards: [] },
+        unlockCondition: [{ stageId: "act31side_02", completeState: "PASS" }],
+        hardStagedId: null,
+        bossMark: false,
+      },
+      "daily_01": {
+        stageId: "daily_01",
+        code: "CE-5",
+        name: "货物运送",
+        stageType: "DAILY",
+        difficulty: "NORMAL",
+        zoneId: "daily_zone1",
+        levelId: "Activities/Daily/level_daily_01",
+        apCost: 30,
+        dangerLevel: "ELITE",
+        description: "高资源产出的每日关卡。",
+        stageDropInfo: {
+          displayRewards: [
+            { type: "GOLD", dropType: "ONCE" },
+            { type: "CARD_EXP", dropType: "ONCE" },
+          ],
+        },
+        unlockCondition: [],
+        hardStagedId: null,
+        bossMark: false,
+      },
+    },
+  };
+
+  const zones = {
+    zones: {
+      main_0: {
+        zoneID: "main_0",
+        zoneNameFirst: "序章",
+        zoneNameSecond: "黑暗时代·上",
+      },
+      act31side_zone1: {
+        zoneID: "act31side_zone1",
+        zoneNameFirst: "火山旅梦",
+        zoneNameSecond: null,
+      },
+      daily_zone1: {
+        zoneID: "daily_zone1",
+        zoneNameFirst: null,
+        zoneNameSecond: null,
+      },
+    },
+  };
+
+  writeFileSync(join(excel, "stage_table.json"), JSON.stringify(stages), "utf-8");
+  writeFileSync(join(excel, "zone_table.json"), JSON.stringify(zones), "utf-8");
+}
+
+// ---------------------------------------------------------------------------
+// listStages
+// ---------------------------------------------------------------------------
+
+test("listStages default returns all", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages();
+  assert.match(out, /关卡列表/);
+  assert.match(out, /坍塌/);
+  assert.match(out, /测试活动关/);
+  assert.match(out, /货物运送/);
+  assert.match(out, /共 4 个/);
+});
+
+test("listStages chapter filter", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages("main_0", null, 50, 0);
+  assert.match(out, /坍塌/);
+  assert.match(out, /坍塌·突袭/);
+  assert.doesNotMatch(out, /测试活动关/);
+  assert.match(out, /共 2 个/);
+});
+
+test("listStages type filter", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages(null, "DAILY", 50, 0);
+  assert.match(out, /货物运送/);
+  assert.doesNotMatch(out, /坍塌/);
+  assert.match(out, /共 1 个/);
+});
+
+test("listStages pagination hint", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages(null, null, 2, 0);
+  assert.match(out, /显示第 1–2 条/);
+  assert.match(out, /offset=2/);
+});
+
+test("listStages offset beyond range", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages(null, null, 50, 100);
+  assert.match(out, /超出范围/);
+});
+
+test("listStages invalid type", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages(null, "INVALID");
+  assert.match(out, /无效的 type/);
+});
+
+test("listStages invalid limit", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.listStages(null, null, 0);
+  assert.match(out, /limit 必须 >= 1/);
+});
+
+// ---------------------------------------------------------------------------
+// getStageInfo
+// ---------------------------------------------------------------------------
+
+test("getStageInfo full info", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("main_00-01");
+  assert.match(out, /坍塌/);
+  assert.match(out, /0-1/);
+  assert.match(out, /主线/);
+  assert.match(out, /普通/);
+  assert.match(out, /序章-黑暗时代·上/);
+  assert.match(out, /6/);
+  assert.match(out, /三点方向/);
+  assert.match(out, /TKT_RECRUIT/);
+  assert.match(out, /无条件/);
+  assert.match(out, /main_00-01#f#/);
+});
+
+test("getStageInfo four star variant strips markup", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("main_00-01#f#");
+  assert.match(out, /突袭/);
+  assert.match(out, /三星通关 main_00-01/);
+  assert.match(out, /BOSS标记/);
+  assert.doesNotMatch(out, /<@lv\.fs>/);
+  assert.match(out, /突袭条件/);
+});
+
+test("getStageInfo null levelId", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("act31side_01");
+  assert.match(out, /测试活动关/);
+  assert.match(out, /AS-1/);
+  assert.doesNotMatch(out, /关卡数据/);
+});
+
+test("getStageInfo multi drops", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("daily_01");
+  assert.match(out, /GOLD/);
+  assert.match(out, /CARD_EXP/);
+});
+
+test("getStageInfo unknown stage", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.getStageInfo("nonexistent");
+  assert.match(out, /未找到关卡/);
+});
+
+// ---------------------------------------------------------------------------
+// searchStages
+// ---------------------------------------------------------------------------
+
+test("searchStages by name", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages("坍塌");
+  assert.match(out, /坍塌/);
+  assert.match(out, /坍塌·突袭/);
+  assert.match(out, /搜索结果/);
+});
+
+test("searchStages by code", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages("AS-1");
+  assert.match(out, /测试活动关/);
+});
+
+test("searchStages by description", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages("先锋");
+  assert.match(out, /坍塌/);
+});
+
+test("searchStages no match", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages("ZZZZNOMATCH");
+  assert.match(out, /未找到匹配/);
+});
+
+test("searchStages invalid regex", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages("[invalid");
+  assert.match(out, /正则表达式无效/);
+});
+
+test("searchStages max_results cap", async () => {
+  const root = tempGamedataRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  writeFixtures(root);
+  const stage = await loadStageModule();
+  const out = stage.searchStages(".", 1);
+  assert.match(out, /共 1 个/);
+});

@@ -19,6 +19,7 @@ import {
 } from "./api/prtsWiki.js";
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
 import { clearEnemyCaches, listEnemies, getEnemyInfo, searchEnemies } from "./data/enemy.js";
+import { clearStageCaches, listStages, getStageInfo, searchStages } from "./data/stage.js";
 import { searchOperatorData } from "./data/search.js";
 import { syncRelease, syncReleaseArchive } from "./data/sync.js";
 import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, STORY_ZH_CN } from "./data/datasets.js";
@@ -322,6 +323,50 @@ function createMcpServer(): McpServer {
   );
 
   // -------------------------------------------------------------------------
+  // Stage tools
+  // -------------------------------------------------------------------------
+
+  server.tool(
+    "list_stages",
+    [
+      "列出关卡列表，支持按章节和类型过滤。",
+      "返回格式：每行 `- **关卡名** [类型] 编号 — 难度 — 区域`。",
+      "获取 stage_id 后可传入 get_stage_info 查看详情。",
+    ].join(" "),
+    {
+      chapter: z.string().optional().describe("按所属章节（zoneId）过滤，如 'main_0'。不填则返回全部。"),
+      type: z.string().optional().describe("按关卡类型过滤：MAIN（主线）/ ACTIVITY（活动）/ SUB（支线）/ DAILY（每日）/ CAMPAIGN（剿灭）/ CLIMB_TOWER（爬塔）。"),
+      limit: z.number().int().min(1).max(200).default(50).describe("返回数量上限，默认 50。"),
+      offset: z.number().int().min(0).default(0).describe("分页偏移量，默认 0。"),
+    },
+    ({ chapter, type, limit, offset }) => ({
+      content: [{ type: "text", text: listStages(chapter ?? null, type ?? null, limit, offset) }],
+    })
+  );
+
+  server.tool(
+    "get_stage_info",
+    "获取指定关卡的详细信息。返回关卡的编号、类型、难度、所属区域、理智消耗、掉落奖励、解锁条件等。",
+    { stage_id: z.string().describe("关卡 ID，如 'main_00-01'（可从 list_stages 获取）。") },
+    ({ stage_id }) => ({ content: [{ type: "text", text: getStageInfo(stage_id) }] })
+  );
+
+  server.tool(
+    "search_stages",
+    [
+      "在关卡数据库中执行全文正则搜索。",
+      "搜索范围覆盖关卡名称、编号、描述。返回匹配关卡的基本信息块。",
+    ].join(" "),
+    {
+      pattern: z.string().describe("正则表达式搜索模式，大小写不敏感。例如 'H10'、'切尔诺伯格'。"),
+      max_results: z.number().int().min(1).max(100).default(30).describe("最多返回条数，默认 30。"),
+    },
+    ({ pattern, max_results }) => ({
+      content: [{ type: "text", text: searchStages(pattern, max_results) }],
+    })
+  );
+
+  // -------------------------------------------------------------------------
   // Story tools
   // -------------------------------------------------------------------------
 
@@ -599,7 +644,11 @@ function createMcpServer(): McpServer {
               "- operators：干员数据（名称、基本信息描述、档案文本、语音台词）\n" +
               '  使用 search_data(scope="operators") 搜索。\n' +
               "- stories：剧情台词（对话、旁白、选项），按活动/章节组织，支持按角色和台词类型过滤。\n" +
-              "  使用 search_stories 搜索。",
+              "  使用 search_stories 搜索。\n" +
+              "- stages：关卡数据（名称、编号、描述、类型、掉落、解锁条件）。\n" +
+              "  使用 list_stages / get_stage_info / search_stages 查询。\n" +
+              "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n" +
+              "  使用 list_enemies / get_enemy_info / search_enemies 查询。",
           },
         ],
       };
@@ -725,6 +774,7 @@ async function runStartupSync(): Promise<void> {
       if (r.status === "updated") {
         clearOperatorCaches();
         clearEnemyCaches();
+        clearStageCaches();
         log("INFO", `Data updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
       } else if (r.status === "up_to_date") {
         log("INFO", `Data is up to date (${r.spec.repo} @ ${sha}).`);
