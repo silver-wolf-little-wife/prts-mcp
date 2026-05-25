@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-05-25
+
+### Added
+
+- **Stage data domain.** Three new tools — `list_stages`, `get_stage_info`,
+  `search_stages` — sourced from `stage_table.json` (3319 stages) and
+  `zone_table.json` (434 zones) in ArknightsGameData. `list_stages` supports
+  zone and stage-type filters with pagination; `get_stage_info` returns
+  detailed per-stage data (drops, unlocks, related variants); `search_stages`
+  performs regex search across names, codes, descriptions, and types.
+- Tool surface expanded from 21 to 24. `list_search_scopes` updated with
+  stages and enemies entries.
+- `stage_table.json` and `zone_table.json` added to sync manifests for
+  integrity validation.
+
 ## [1.4.2] - 2026-05-25
 
 ### Fixed

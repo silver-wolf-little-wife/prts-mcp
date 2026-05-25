@@ -6,8 +6,8 @@ _Last updated: 2026-05-25_
 
 | 实现 | 版本 | 状态 |
 |------|------|------|
-| Python | 1.4.2 | stable |
-| TypeScript | 1.4.2 | stable |
+| Python | 1.5.0 | stable |
+| TypeScript | 1.5.0 | stable |
 
 - 公共工具面：21 个 MCP 工具（1.x 冻结）
 - 兼容性合约：1.x 期间工具名和必填参数不变
@@ -55,7 +55,7 @@ PRTS-MCP/
 | [ArknightsStoryJson](https://github.com/3aKHP/ArknightsStoryJson) | 剧情台词 | GitHub Release `zh_CN.zip` |
 | [PRTS Wiki API](https://prts.wiki/api.php) | 世界观词条/阵营设定 | 实时 HTTP 请求 |
 
-## 工具清单 (17)
+## 工具清单 (24)
 
 | # | 工具 | 数据源 | 版本 |
 |---|------|--------|------|
@@ -80,6 +80,9 @@ PRTS-MCP/
 | 19 | `list_enemies` | GameData | 1.4.0 |
 | 20 | `get_enemy_info` | GameData | 1.4.0 |
 | 21 | `search_enemies` | GameData | 1.4.0 |
+| 22 | `list_stages` | GameData | 1.5.0 |
+| 23 | `get_stage_info` | GameData | 1.5.0 |
+| 24 | `search_stages` | GameData | 1.5.0 |
 
 ## 遗留 TODO
 
@@ -90,6 +93,8 @@ PRTS-MCP/
 
 | 版本 | 日期 | 亮点 |
 |------|------|------|
+| 1.5.0 | 2026-05-25 | 关卡数据域：list_stages、get_stage_info、search_stages（24 工具） |
+| 1.4.2 | 2026-05-25 | 修复 Streamable HTTP session pool 400 错误 |
 | 1.4.1 | 2026-05-19 | 生产修复：ZipStore 缓存、session 泄漏、httpx 复用、审计 parity |
 | 1.4.0 | 2026-05-19 | 模板提取工具 + 敌人图鉴（含战斗属性） |
 | 1.3.1 | 2026-05-19 | 修复 trap/token 同名干员 ID 碰撞 |

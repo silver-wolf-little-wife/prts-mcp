@@ -6,8 +6,8 @@ PRTS-MCP is past 1.0. The public tool surface and data architecture are under a 
 
 ## Current Release
 
-- Python: `1.4.2`
-- TypeScript: `1.4.2`
+- Python: `1.5.0`
+- TypeScript: `1.5.0`
 - 21 public MCP tools, frozen in the 1.x line (CI-enforced).
 - See [migration guide](docs/migration-0.x-to-1.0.md) for the
   0.x → 1.0 transition.
