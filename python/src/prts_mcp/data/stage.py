@@ -41,7 +41,8 @@ def _get_config() -> _Config:
 
 def _store() -> _DirectoryStore:
     ep = _get_config().effective_excel_path
-    assert ep is not None
+    if ep is None:
+        raise RuntimeError("effective_excel_path is None — GAMEDATA_PATH may be unset")
     return _DirectoryStore(ep)
 
 
@@ -97,7 +98,7 @@ def _format_drops(drop_info: dict | None) -> str:
         return "（无）"
     parts: list[str] = []
     for d in display:
-        name = d.get("type", d.get("dropType", "?"))
+        name = d.get("type") or d.get("dropType") or "?"
         count = d.get("count", 1)
         parts.append(f"- {name} ×{count}")
     return "\n".join(parts) if parts else "（无）"
@@ -237,7 +238,8 @@ def get_stage_info(stage_id: str) -> str:
     d_label = _difficulty_label(entry.get("difficulty", ""))
     zone_id = entry.get("zoneId", "")
     zd = _zone_display(zone_id)
-    ap = entry.get("apCost") or "?"
+    _ap = entry.get("apCost")
+    ap = _ap if _ap is not None else "?"
     danger = entry.get("dangerLevel") or "?"
     boss = entry.get("bossMark", False)
     raw_desc = entry.get("description") or ""
@@ -330,7 +332,8 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
         t_label = _stage_type_label(e.get("stageType", ""))
         d_label = _difficulty_label(e.get("difficulty", ""))
         zd = _zone_display(e.get("zoneId", ""))
-        ap = e.get("apCost") or "?"
+        _ap = e.get("apCost")
+        ap = _ap if _ap is not None else "?"
         raw_desc = e.get("description") or ""
         cdesc = _clean_description(raw_desc)
 
