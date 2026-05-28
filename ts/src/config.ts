@@ -19,6 +19,11 @@
  *     2. /data/storyjson/zh_CN.zip — Docker volume mount-point.
  *     3. /app/data/storyjson/zh_CN.zip — bundled zip (only inside Docker).
  *     4. null — no story data available.
+ *
+ *   effectiveLevelsPath — priority:
+ *     1. Runtime sync path beside gamedata (or /data/gamedata-levels in Docker).
+ *     2. Bundled fallback beside package data.
+ *     3. null — no level combat data available.
  */
 
 import { existsSync, statSync } from "node:fs";
@@ -60,6 +65,12 @@ const DOCKER_STORYJSON_ZIP = "/data/storyjson/zh_CN.zip";
 /** Bundled storyjson zip baked into the package at publish/build time. */
 const BUNDLED_STORYJSON_ZIP = join(_PACKAGE_ROOT, "data", "storyjson", "zh_CN.zip");
 
+/** Fixed levels volume path inside Docker. */
+const DOCKER_LEVELS_PATH = "/data/gamedata-levels";
+
+/** Bundled levels fallback baked into the package at publish/build time. */
+export const BUNDLED_LEVELS_PATH = join(_PACKAGE_ROOT, "data", "gamedata-levels");
+
 // ---------------------------------------------------------------------------
 // Path resolution
 // ---------------------------------------------------------------------------
@@ -85,11 +96,29 @@ function excelPath(gamedataRoot: string): string {
   return join(gamedataRoot, "zh_CN", "gamedata", "excel");
 }
 
+function levelsPath(gamedataRoot: string): string {
+  return join(dirname(gamedataRoot), "gamedata-levels");
+}
+
+function resolveLevelsPath(gamedataRoot: string): string {
+  if ("GAMEDATA_PATH" in process.env && levelsComplete(gamedataRoot)) {
+    return gamedataRoot;
+  }
+  if ("GAMEDATA_PATH" in process.env) return levelsPath(gamedataRoot);
+  if (process.env["PRTS_MCP_ROOT"] === "/app") return DOCKER_LEVELS_PATH;
+  return levelsPath(gamedataRoot);
+}
+
 function filesComplete(excel: string): boolean {
   return REQUIRED_OPERATOR_FILES.every((f) => {
     const p = join(excel, f);
     return existsSync(p) && statSync(p).isFile();
   });
+}
+
+function levelsComplete(root: string): boolean {
+  const p = join(root, "zh_CN", "gamedata", "levels", "enemydata", "enemy_database.json");
+  return existsSync(p) && statSync(p).isFile();
 }
 
 // ---------------------------------------------------------------------------
@@ -103,14 +132,20 @@ export interface Config {
   isCustomGamedata: boolean;
   /** Primary excel path (under gamedataPath). */
   excelPath: string;
+  /** Sync write target for zh_CN-levels.zip extraction. */
+  levelsPath: string;
   /** Bundled excel path (read-only fallback, only exists inside Docker). */
   bundledExcelPath: string;
+  /** Bundled level data path (read-only fallback). */
+  bundledLevelsPath: string;
   /**
    * The path operator.ts should actually read from.
    * Prefers the sync path when complete; falls back to bundled data; null
    * when neither location has data.
    */
   effectiveExcelPath: string | null;
+  /** The path level/stage-enemy readers should read from. */
+  effectiveLevelsPath: string | null;
   /**
    * Configured storyjson zip path (STORYJSON_PATH env var or default).
    * This is the sync write target, not necessarily the file that exists.
@@ -131,6 +166,10 @@ export function hasStoryData(cfg: Config): boolean {
   return cfg.effectiveStoryjsonZip !== null;
 }
 
+export function hasLevelsData(cfg: Config): boolean {
+  return cfg.effectiveLevelsPath !== null;
+}
+
 export function loadConfig(): Config {
   const isCustomGamedata = "GAMEDATA_PATH" in process.env;
   const gamedataPath = isCustomGamedata
@@ -138,11 +177,17 @@ export function loadConfig(): Config {
     : DEFAULT_GAMEDATA_PATH;
 
   const ep = excelPath(gamedataPath);
+  const lp = resolveLevelsPath(gamedataPath);
   const bep = excelPath(BUNDLED_GAMEDATA_PATH);
+  const blp = BUNDLED_LEVELS_PATH;
 
   let effectiveExcelPath: string | null = null;
   if (filesComplete(ep)) effectiveExcelPath = ep;
   else if (filesComplete(bep)) effectiveExcelPath = bep;
+
+  let effectiveLevelsPath: string | null = null;
+  if (levelsComplete(lp)) effectiveLevelsPath = lp;
+  else if (levelsComplete(blp)) effectiveLevelsPath = blp;
 
   // storyjson zip: default is alongside gamedata in the user data dir.
   const defaultStoryjsonZip = join(
@@ -164,8 +209,11 @@ export function loadConfig(): Config {
     gamedataPath,
     isCustomGamedata,
     excelPath: ep,
+    levelsPath: lp,
     bundledExcelPath: bep,
+    bundledLevelsPath: blp,
     effectiveExcelPath,
+    effectiveLevelsPath,
     storyjsonZip,
     effectiveStoryjsonZip,
   };

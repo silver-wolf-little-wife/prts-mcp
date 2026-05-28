@@ -12,9 +12,11 @@ async function loadEnemyModule(): Promise<typeof import("../src/data/enemy.js")>
   return import(`../src/data/enemy.ts?cacheBust=${Date.now()}-${Math.random()}`);
 }
 
-function writeFixtures(root: string): void {
+function writeFixtures(root: string, levelsRoot?: string): void {
   const excel = join(root, "zh_CN", "gamedata", "excel");
-  const dbRoot = join(root, "zh_CN", "gamedata", "levels", "enemydata");
+  const dbRoot = levelsRoot
+    ? join(levelsRoot, "zh_CN", "gamedata", "levels", "enemydata")
+    : join(root, "zh_CN", "gamedata", "levels", "enemydata");
   mkdirSync(excel, { recursive: true });
   mkdirSync(dbRoot, { recursive: true });
 
@@ -216,6 +218,18 @@ test("get_enemy_info merges handbook and database", async () => {
   assert.match(out, /\*\*免疫\*\*：眩晕、冻结/);
   assert.match(out, /ArcticBlast/);
   assert.match(out, /duration=8/);
+});
+
+test("get_enemy_info reads database from sibling levels path", async () => {
+  const root = tempGamedataRoot();
+  const gamedata = join(root, "gamedata");
+  const levels = join(root, "gamedata-levels");
+  process.env["GAMEDATA_PATH"] = gamedata;
+  writeFixtures(gamedata, levels);
+  const enemy = await loadEnemyModule();
+  const out = enemy.getEnemyInfo("霜星");
+  assert.match(out, /\*\*最大生命\*\*：25,000/);
+  assert.match(out, /\*\*免疫\*\*：眩晕、冻结/);
 });
 
 test("get_enemy_info handbook-only when no database entry", async () => {

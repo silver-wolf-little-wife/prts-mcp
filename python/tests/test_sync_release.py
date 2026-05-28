@@ -272,6 +272,30 @@ class TestSyncReleaseArchive:
         assert result.status == "up_to_date"
         assert (spec.local_root / "zh_CN/gamedata/excel/character_table.json").is_file()
 
+    def test_archive_missing_required_zip_entry_returns_no_data(self, tmp_path):
+        zip_path = tmp_path / "archives" / "zh_CN-levels.zip"
+        zip_path.parent.mkdir(parents=True)
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("zh_CN/gamedata/levels/obt/main/level_main_00-01.json", "{}")
+
+        spec = ReleaseArchiveSpec(
+            owner="3aKHP",
+            repo="ArknightsGameData",
+            asset_name="zh_CN-levels.zip",
+            local_zip=zip_path,
+            local_root=tmp_path / "gamedata-levels",
+            required_files=("zh_CN/gamedata/levels/enemydata/enemy_database.json",),
+        )
+
+        with patch(
+            "prts_mcp.data.sync.check_latest_release",
+            return_value=None,
+        ):
+            result = sync_release_archive(spec)
+
+        assert result.status == "no_data"
+        assert "enemy_database.json" in (result.error or "")
+
     def test_rejects_unsafe_zip_member(self, tmp_path):
         zip_path = tmp_path / "archives" / "zh_CN-excel.zip"
         zip_path.parent.mkdir(parents=True)

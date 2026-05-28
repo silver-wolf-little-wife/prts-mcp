@@ -29,8 +29,10 @@ export const GAMEDATA_FILES: readonly string[] = [
   "zh_CN/gamedata/excel/handbook_info_table.json",
   "zh_CN/gamedata/excel/charword_table.json",
   "zh_CN/gamedata/excel/story_review_table.json",
+  "zh_CN/gamedata/excel/enemy_handbook_table.json",
   "zh_CN/gamedata/excel/stage_table.json",
   "zh_CN/gamedata/excel/zone_table.json",
+  "zh_CN/gamedata/excel/item_table.json",
 ];
 
 const GITHUB_UA = "PRTS-MCP-Bot/0.1 (Arknights fan-creation helper)";
@@ -557,6 +559,23 @@ function archiveFilesPresent(spec: ReleaseArchiveSpec): boolean {
   });
 }
 
+function archiveMissingFiles(spec: ReleaseArchiveSpec): string[] {
+  return spec.requiredFiles.filter((f) => {
+    const p = join(spec.localRoot, f);
+    return !existsSync(p) || !statSync(p).isFile();
+  });
+}
+
+function validateArchiveZip(zipPath: string, requiredFiles: readonly string[]): string[] {
+  try {
+    const zip = new AdmZip(zipPath);
+    const entries = new Set(zip.getEntries().filter((entry) => !entry.isDirectory).map((entry) => entry.entryName));
+    return requiredFiles.filter((file) => !entries.has(file));
+  } catch (err) {
+    return [`${basename(zipPath)} is not a valid zip: ${errorMessage(err)}`];
+  }
+}
+
 async function safeExtractZip(zipPath: string, localRoot: string): Promise<void> {
   const root = resolve(localRoot);
   const zip = new AdmZip(zipPath);
@@ -603,6 +622,7 @@ export async function syncReleaseArchive(
     repo: spec.repo,
     assetName: spec.assetName,
     localZip: spec.localZip,
+    validateZip: (zipPath) => validateArchiveZip(zipPath, spec.requiredFiles),
   });
 
   const dummySpec: RepoSpec = {
@@ -636,6 +656,24 @@ export async function syncReleaseArchive(
       await safeExtractZip(spec.localZip, spec.localRoot);
     } catch (err) {
       const error = errorMessage(err);
+      return archiveFilesPresent(spec)
+        ? {
+            spec: dummySpec,
+            status: "offline_fallback",
+            commitSha: releaseResult.commitSha,
+            error,
+          }
+        : {
+            spec: dummySpec,
+            status: "no_data",
+            commitSha: releaseResult.commitSha,
+            error,
+          };
+    }
+
+    const missing = archiveMissingFiles(spec);
+    if (missing.length > 0) {
+      const error = `Archive extraction missing required files: ${missing.slice(0, 10).join("; ")}`;
       return archiveFilesPresent(spec)
         ? {
             spec: dummySpec,

@@ -51,3 +51,33 @@ class TestEffectiveStoryjsonZip:
 
         assert cfg.effective_storyjson_zip == local_zip
         assert cfg.has_story_data is True
+
+
+class TestEffectiveLevelsPath:
+    def test_custom_gamedata_uses_embedded_levels_when_present(self, tmp_path):
+        levels = tmp_path / "custom" / "zh_CN" / "gamedata" / "levels" / "enemydata"
+        levels.mkdir(parents=True)
+        (levels / "enemy_database.json").write_text("{}", encoding="utf-8")
+
+        with patch.dict(
+            os.environ,
+            {"GAMEDATA_PATH": str(tmp_path / "custom"), "PRTS_MCP_ROOT": "/app"},
+            clear=False,
+        ):
+            cfg = Config.load()
+
+        assert cfg.levels_path == tmp_path / "custom"
+        assert cfg.effective_levels_path == tmp_path / "custom"
+        assert cfg.has_levels_data is True
+
+    def test_custom_gamedata_without_embedded_levels_uses_sibling_path(self, tmp_path):
+        with patch.dict(
+            os.environ,
+            {"GAMEDATA_PATH": str(tmp_path / "custom"), "PRTS_MCP_ROOT": "/app"},
+            clear=False,
+        ):
+            cfg = Config.load()
+
+        assert cfg.levels_path == tmp_path / "gamedata-levels"
+        assert cfg.effective_levels_path is None
+        assert cfg.has_levels_data is False

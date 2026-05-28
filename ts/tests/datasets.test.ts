@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import AdmZip from "adm-zip";
 import {
   GAMEDATA_EXCEL,
+  GAMEDATA_LEVELS,
   STORY_ZH_CN,
   validateStoryjsonZip,
 } from "../src/data/datasets.ts";
@@ -31,6 +32,15 @@ test("dataset specs expose expected release asset requirements", () => {
   assert.equal(GAMEDATA_EXCEL.datasetId, "gamedata.excel");
   assert.equal(GAMEDATA_EXCEL.assetName, "zh_CN-excel.zip");
   assert.ok(GAMEDATA_EXCEL.requiredFiles.includes("zh_CN/gamedata/excel/character_table.json"));
+  assert.ok(GAMEDATA_EXCEL.requiredFiles.includes("zh_CN/gamedata/excel/enemy_handbook_table.json"));
+  assert.ok(GAMEDATA_EXCEL.requiredFiles.includes("zh_CN/gamedata/excel/item_table.json"));
+  assert.ok(GAMEDATA_EXCEL.requiredFiles.includes("zh_CN/gamedata/excel/stage_table.json"));
+
+  assert.equal(GAMEDATA_LEVELS.datasetId, "gamedata.levels");
+  assert.equal(GAMEDATA_LEVELS.assetName, "zh_CN-levels.zip");
+  assert.deepEqual(GAMEDATA_LEVELS.requiredFiles, [
+    "zh_CN/gamedata/levels/enemydata/enemy_database.json",
+  ]);
 
   assert.equal(STORY_ZH_CN.datasetId, "story.zh_CN");
   assert.equal(STORY_ZH_CN.assetName, "zh_CN.zip");

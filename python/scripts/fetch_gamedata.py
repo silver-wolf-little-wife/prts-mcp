@@ -1,4 +1,4 @@
-"""Fetch the latest game data archive from GitHub Releases into data/gamedata/.
+"""Fetch the latest game data archives from GitHub Releases into data/.
 
 Used by CI during Docker image build to bake fresh data into the image.
 Can also be run manually during local development.
@@ -27,7 +27,7 @@ _SRC_DIR = _PYTHON_DIR / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from prts_mcp.data.datasets import GAMEDATA_EXCEL  # noqa: E402
+from prts_mcp.data.datasets import GAMEDATA_EXCEL, GAMEDATA_LEVELS  # noqa: E402
 from prts_mcp.data.sync import SyncResult, sync_release_archive  # noqa: E402
 
 logging.basicConfig(
@@ -40,7 +40,7 @@ _logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch the latest ArknightsGameData excel archive from GitHub Releases."
+        description="Fetch the latest ArknightsGameData excel and levels archives from GitHub Releases."
     )
     parser.add_argument(
         "--force",
@@ -54,6 +54,12 @@ def parse_args() -> argparse.Namespace:
         help="Local root directory for cached game data. Default: data/gamedata",
     )
     parser.add_argument(
+        "--levels-output",
+        type=Path,
+        default=None,
+        help="Local root directory for cached level combat data. Default: sibling gamedata-levels next to --output.",
+    )
+    parser.add_argument(
         "--archive-cache",
         type=Path,
         default=None,
@@ -65,44 +71,56 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
 
-    spec = GAMEDATA_EXCEL.archive_spec(
-        local_zip=(args.archive_cache or args.output / "archives" / "zh_CN-excel.zip").resolve(),
-        local_root=args.output.resolve(),
-    )
+    excel_root = args.output.resolve()
+    levels_root = (args.levels_output or args.output.parent / "gamedata-levels").resolve()
+
+    specs = [
+        GAMEDATA_EXCEL.archive_spec(
+            local_zip=(args.archive_cache or excel_root / "archives" / "zh_CN-excel.zip").resolve(),
+            local_root=excel_root,
+        ),
+        GAMEDATA_LEVELS.archive_spec(
+            local_zip=(levels_root / "archives" / "zh_CN-levels.zip").resolve(),
+            local_root=levels_root,
+        ),
+    ]
 
     if args.force:
-        # Wipe release metadata so sync_release_archive always downloads
-        cache_path = spec.local_zip.parent / "release_meta.json"
-        if cache_path.exists():
-            cache_path.unlink()
-            _logger.info("--force: removed release_meta.json to trigger full re-download.")
+        for spec in specs:
+            # Wipe release metadata so sync_release_archive always downloads.
+            cache_path = spec.local_zip.parent / "release_meta.json"
+            if cache_path.exists():
+                cache_path.unlink()
+                _logger.info("--force: removed %s to trigger full re-download.", cache_path)
 
-    _logger.info("Syncing %s/%s:%s → %s", spec.owner, spec.repo, spec.asset_name, spec.local_root)
-    result: SyncResult = sync_release_archive(spec)
+    failed = False
+    for spec in specs:
+        _logger.info("Syncing %s/%s:%s → %s", spec.owner, spec.repo, spec.asset_name, spec.local_root)
+        result: SyncResult = sync_release_archive(spec)
 
-    sha_short = result.commit_sha[:8] if result.commit_sha else "unknown"
+        sha_short = result.commit_sha[:8] if result.commit_sha else "unknown"
 
-    if result.status == "updated":
-        _logger.info("Done. Data updated to %s @ %s.", spec.repo, sha_short)
-        return 0
-    elif result.status == "up_to_date":
-        _logger.info("Data is already up to date (%s @ %s).", spec.repo, sha_short)
-        return 0
-    elif result.status == "offline_fallback":
-        _logger.warning(
-            "Network error; using existing cached data (%s @ %s). Error: %s",
-            spec.repo,
-            sha_short,
-            result.error,
-        )
-        return 0
-    else:  # no_data
-        _logger.error(
-            "Failed to obtain data for %s. No usable files available. Error: %s",
-            spec.repo,
-            result.error,
-        )
-        return 1
+        if result.status == "updated":
+            _logger.info("Done. Data updated to %s @ %s.", spec.repo, sha_short)
+        elif result.status == "up_to_date":
+            _logger.info("Data is already up to date (%s @ %s).", spec.repo, sha_short)
+        elif result.status == "offline_fallback":
+            _logger.warning(
+                "Network error; using existing cached data (%s @ %s). Error: %s",
+                spec.repo,
+                sha_short,
+                result.error,
+            )
+        else:  # no_data
+            _logger.error(
+                "Failed to obtain data for %s:%s. No usable files available. Error: %s",
+                spec.repo,
+                spec.asset_name,
+                result.error,
+            )
+            failed = True
+
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

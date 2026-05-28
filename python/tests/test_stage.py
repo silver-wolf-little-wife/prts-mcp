@@ -141,6 +141,23 @@ def _make_fixture(root: Path) -> None:
     (excel / "zone_table.json").write_text(
         json.dumps(zone_table, ensure_ascii=False), encoding="utf-8"
     )
+    (excel / "item_table.json").write_text(
+        json.dumps(
+            {
+                "items": {
+                    "7001": {
+                        "itemId": "7001",
+                        "name": "招聘许可",
+                        "hideInItemGet": False,
+                        "classifyType": "NORMAL",
+                        "itemType": "TKT_RECRUIT",
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -232,7 +249,7 @@ class TestGetStageInfo:
         assert "序章-黑暗时代·上" in out
         assert "6" in out
         assert "三点方向" in out
-        assert "TKT_RECRUIT" in out
+        assert "招聘许可（7001）" in out
         assert "无条件" in out
         assert "main_00-01#f#" in out
 

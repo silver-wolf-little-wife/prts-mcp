@@ -94,8 +94,10 @@ jobs:
       - name: Restore cached gamedata
         uses: actions/cache/restore@v4
         with:
-          path: data/gamedata
-          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json') }}
+          path: |
+            data/gamedata
+            data/gamedata-levels
+          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json', 'data/gamedata-levels/archives/release_meta.json') }}
           restore-keys: gamedata-
 
       - name: Fetch latest gamedata from GitHub
@@ -117,8 +119,10 @@ jobs:
       - name: Save gamedata cache
         uses: actions/cache/save@v4
         with:
-          path: data/gamedata
-          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json') }}
+          path: |
+            data/gamedata
+            data/gamedata-levels
+          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json', 'data/gamedata-levels/archives/release_meta.json') }}
 
       - name: Build Docker image
         run: docker build -f python/Dockerfile -t prts-mcp-python:latest .
@@ -215,8 +219,10 @@ jobs:
       - name: Restore cached gamedata
         uses: actions/cache/restore@v4
         with:
-          path: data/gamedata
-          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json') }}
+          path: |
+            data/gamedata
+            data/gamedata-levels
+          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json', 'data/gamedata-levels/archives/release_meta.json') }}
           restore-keys: gamedata-
 
       - name: Fetch latest gamedata from GitHub
@@ -236,8 +242,10 @@ jobs:
       - name: Save gamedata cache
         uses: actions/cache/save@v4
         with:
-          path: data/gamedata
-          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json') }}
+          path: |
+            data/gamedata
+            data/gamedata-levels
+          key: gamedata-${{ hashFiles('data/gamedata/archives/release_meta.json', 'data/gamedata-levels/archives/release_meta.json') }}
 
       - name: Build Docker image
         run: docker build -f ts/Dockerfile -t prts-mcp-ts:latest .

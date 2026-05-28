@@ -13,6 +13,9 @@ STORYJSON_REQUIRED_FILES: tuple[str, ...] = (
     "zh_CN/storyinfo.json",
 )
 STORYJSON_REVIEW_TABLE = "zh_CN/gamedata/excel/story_review_table.json"
+LEVELS_REQUIRED_FILES: tuple[str, ...] = (
+    "zh_CN/gamedata/levels/enemydata/enemy_database.json",
+)
 
 
 @dataclass(frozen=True)
@@ -96,4 +99,12 @@ STORY_ZH_CN = ReleaseDatasetSpec(
     repo="ArknightsStoryJson",
     asset_name="zh_CN.zip",
     required_files=STORYJSON_REQUIRED_FILES,
+)
+
+GAMEDATA_LEVELS = ReleaseDatasetSpec(
+    dataset_id="gamedata.levels",
+    owner="3aKHP",
+    repo="ArknightsGameData",
+    asset_name="zh_CN-levels.zip",
+    required_files=LEVELS_REQUIRED_FILES,
 )

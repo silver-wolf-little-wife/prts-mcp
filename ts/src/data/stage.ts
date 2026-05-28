@@ -1,5 +1,6 @@
 import { loadConfig } from "../config.js";
 import { DirectoryStore } from "./stores.js";
+import { getItemNameById } from "./item.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,9 +107,14 @@ function formatDrops(dropInfo: Record<string, unknown> | null | undefined): stri
   const display = (dropInfo["displayRewards"] ?? []) as Record<string, unknown>[];
   if (!Array.isArray(display) || display.length === 0) return "（无）";
   const parts = display.map((d) => {
-    const name = d["type"] ?? d["dropType"] ?? "?";
+    const itemId = String(d["id"] ?? "");
+    const itemName = itemId ? getItemNameById(itemId) : null;
+    let name = String(itemName ?? d["type"] ?? d["dropType"] ?? itemId ?? "?");
+    if (itemId && itemName) name = `${name}（${itemId}）`;
+    else if (itemId && name !== itemId) name = `${name}（${itemId}）`;
     const count = (d["count"] as number) ?? 1;
-    return `- ${name} ×${count}`;
+    const dropType = d["dropType"] ? ` [${String(d["dropType"])}]` : "";
+    return `- ${name} ×${count}${dropType}`;
   });
   return parts.length > 0 ? parts.join("\n") : "（无）";
 }

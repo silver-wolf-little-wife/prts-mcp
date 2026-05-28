@@ -20,9 +20,11 @@ import {
 import { clearOperatorCaches, getOperatorArchives, getOperatorVoicelines, getOperatorBasicInfo } from "./data/operator.js";
 import { clearEnemyCaches, listEnemies, getEnemyInfo, searchEnemies } from "./data/enemy.js";
 import { clearStageCaches, listStages, getStageInfo, searchStages } from "./data/stage.js";
+import { clearItemCaches, listItems, getItemInfo, searchItems } from "./data/item.js";
+import { clearStageEnemyCaches, getStageEnemies, getEnemyAppearances, getEnemyStageInfo } from "./data/stageEnemy.js";
 import { searchOperatorData } from "./data/search.js";
 import { syncRelease, syncReleaseArchive } from "./data/sync.js";
-import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, STORY_ZH_CN } from "./data/datasets.js";
+import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, GAMEDATA_LEVELS, STORY_ZH_CN } from "./data/datasets.js";
 import {
   listStoryEvents as _listStoryEvents,
   listStories as _listStories,
@@ -303,9 +305,17 @@ function createMcpServer(): McpServer {
 
   server.tool(
     "get_enemy_info",
-    "获取指定敌人的详细图鉴资料。",
-    { name: z.string().describe("敌人的游戏内中文名，如「源石虫」、「霜星」。") },
-    ({ name }) => ({ content: [{ type: "text", text: getEnemyInfo(name) }] })
+    [
+      "获取指定敌人的详细图鉴资料。",
+      "默认返回图鉴信息；若提供 stage_id，则返回该敌人在指定关卡内的等级与关卡覆盖后的战斗属性。",
+    ].join(" "),
+    {
+      name: z.string().describe("敌人的游戏内中文名，如「源石虫」、「霜星」。"),
+      stage_id: z.string().optional().describe("可选关卡 ID；设置后返回该关卡内的敌人等级/覆盖后的战斗属性。"),
+    },
+    ({ name, stage_id }) => ({
+      content: [{ type: "text", text: stage_id ? getEnemyStageInfo(name, stage_id) : getEnemyInfo(name) }],
+    })
   );
 
   server.tool(
@@ -320,6 +330,34 @@ function createMcpServer(): McpServer {
       max_results: z.number().int().min(1).max(100).default(30).describe("返回结果数量上限，默认 30。"),
     },
     ({ pattern, max_results }) => ({ content: [{ type: "text", text: searchEnemies(pattern, max_results) }] })
+  );
+
+  server.tool(
+    "get_stage_enemies",
+    [
+      "获取指定关卡实际出场的敌人列表。",
+      "基于关卡 level JSON 的 SPAWN 动作统计实际出怪，并合并 enemy_database 中对应该关卡敌人等级的战斗属性。",
+    ].join(" "),
+    {
+      stage_id: z.string().describe("关卡 ID，如 'main_00-01'（可从 list_stages 获取）。"),
+    },
+    ({ stage_id }) => ({ content: [{ type: "text", text: getStageEnemies(stage_id) }] })
+  );
+
+  server.tool(
+    "get_enemy_appearances",
+    [
+      "反向查询指定敌人实际出现在哪些关卡。",
+      "只统计关卡 level JSON 中 SPAWN 动作真正刷出的敌人，不把 enemyDbRefs 中未实际出场的引用计入结果。",
+    ].join(" "),
+    {
+      name: z.string().describe("敌人的游戏内中文名或 enemyId，如「源石虫」或 enemy_1007_slime。"),
+      limit: z.number().int().min(1).max(200).default(50).describe("返回数量上限，默认 50。"),
+      offset: z.number().int().min(0).default(0).describe("分页偏移量，默认 0。"),
+    },
+    ({ name, limit, offset }) => ({
+      content: [{ type: "text", text: getEnemyAppearances(name, limit, offset) }],
+    })
   );
 
   // -------------------------------------------------------------------------
@@ -363,6 +401,54 @@ function createMcpServer(): McpServer {
     },
     ({ pattern, max_results }) => ({
       content: [{ type: "text", text: searchStages(pattern, max_results) }],
+    })
+  );
+
+  // -------------------------------------------------------------------------
+  // Item tools
+  // -------------------------------------------------------------------------
+
+  server.tool(
+    "list_items",
+    [
+      "列出物品/材料列表，支持按分类过滤和分页。",
+      "返回物品名称、分类、类型、稀有度、ID 和简短用途。",
+      "适合查找材料、货币、凭证等 item_table 物品。",
+    ].join(" "),
+    {
+      category: z.string().optional().describe("按物品分类过滤，如 MATERIAL（材料）、NORMAL（普通）、CONSUME（消耗品）。不填则返回全部可见物品。"),
+      limit: z.number().int().min(1).max(200).default(50).describe("返回数量上限，默认 50。"),
+      offset: z.number().int().min(0).default(0).describe("分页偏移量，默认 0。"),
+    },
+    ({ category, limit, offset }) => ({
+      content: [{ type: "text", text: listItems(category ?? null, limit, offset) }],
+    })
+  );
+
+  server.tool(
+    "get_item_info",
+    [
+      "获取指定物品/材料的详细信息。",
+      "返回物品的描述、用途、获取方式、掉落关卡、基建产出和商店/凭证关联等。",
+    ].join(" "),
+    {
+      name: z.string().describe("物品中文名或 itemId，如「固源岩」、「招聘许可」或 \"30012\"。"),
+    },
+    ({ name }) => ({ content: [{ type: "text", text: getItemInfo(name) }] })
+  );
+
+  server.tool(
+    "search_items",
+    [
+      "在物品/材料数据中进行全文正则搜索。",
+      "搜索范围包含物品名称、描述、用途、获取方式和类型。",
+    ].join(" "),
+    {
+      pattern: z.string().describe("正则表达式搜索模式，如「源岩|装置」。"),
+      max_results: z.number().int().min(1).max(100).default(30).describe("返回结果数量上限，默认 30。"),
+    },
+    ({ pattern, max_results }) => ({
+      content: [{ type: "text", text: searchItems(pattern, max_results) }],
     })
   );
 
@@ -650,7 +736,9 @@ function createMcpServer(): McpServer {
               "- stages：关卡数据（名称、编号、描述、类型、掉落、解锁条件）。\n" +
               "  使用 list_stages / get_stage_info / search_stages 查询。\n" +
               "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n" +
-              "  使用 list_enemies / get_enemy_info / search_enemies 查询。",
+              "  使用 list_enemies / get_enemy_info / search_enemies 查询。\n" +
+              "- items：物品/材料（名称、描述、用途、掉落、商店关联）。\n" +
+              "  使用 list_items / get_item_info / search_items 查询。",
           },
         ],
       };
@@ -725,9 +813,24 @@ function createMcpServer(): McpServer {
 // ---------------------------------------------------------------------------
 
 const SYNC_RETRY_DELAYS_MS = [30_000, 120_000, 600_000] as const;
+const syncInFlight = new Set<string>();
+type SyncRunResult = "retry" | "done" | "skipped";
 
 function shouldRetrySync(status: string): boolean {
   return status === "offline_fallback" || status === "no_data";
+}
+
+async function singleFlightSync(label: string, runSync: () => Promise<boolean>): Promise<SyncRunResult> {
+  if (syncInFlight.has(label)) {
+    log("INFO", `${label} sync is already running; skipping overlapping attempt.`);
+    return "skipped";
+  }
+  syncInFlight.add(label);
+  try {
+    return await runSync() ? "retry" : "done";
+  } finally {
+    syncInFlight.delete(label);
+  }
 }
 
 function scheduleSyncRetry(
@@ -742,9 +845,10 @@ function scheduleSyncRetry(
   }
 
   const timer = setTimeout(() => {
-    void runSync()
-      .then((needsRetry) => {
-        if (needsRetry) scheduleSyncRetry(label, runSync, attempt + 1);
+    void singleFlightSync(label, runSync)
+      .then((result) => {
+        if (result === "skipped") scheduleSyncRetry(label, runSync, attempt);
+        else if (result === "retry") scheduleSyncRetry(label, runSync, attempt + 1);
       })
       .catch((err: unknown) => {
         log("ERROR", `${label} retry sync threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`);
@@ -777,6 +881,8 @@ async function runStartupSync(): Promise<void> {
         clearOperatorCaches();
         clearEnemyCaches();
         clearStageCaches();
+        clearItemCaches();
+        clearStageEnemyCaches();
         log("INFO", `Data updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
       } else if (r.status === "up_to_date") {
         log("INFO", `Data is up to date (${r.spec.repo} @ ${sha}).`);
@@ -789,13 +895,47 @@ async function runStartupSync(): Promise<void> {
     };
 
     startupTasks.push(
-      runGamedataSync()
+      singleFlightSync("Gamedata", runGamedataSync)
         .catch((err: unknown) => {
           log("ERROR", `Startup sync threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`);
           return true;
         })
-        .then((needsRetry) => {
-          if (needsRetry) scheduleSyncRetry("Gamedata", runGamedataSync);
+        .then((result) => {
+          if (result !== "done") scheduleSyncRetry("Gamedata", runGamedataSync);
+        }),
+    );
+
+    const levelsSpec = archiveSpecForDataset(
+      GAMEDATA_LEVELS,
+      join(cfg.levelsPath, "archives", "zh_CN-levels.zip"),
+      cfg.levelsPath,
+    );
+
+    const runLevelsSync = async (): Promise<boolean> => {
+      const r = await syncReleaseArchive(levelsSpec);
+      const sha = r.commitSha ? r.commitSha.slice(0, 8) : "unknown";
+      if (r.status === "updated") {
+        clearEnemyCaches();
+        clearStageEnemyCaches();
+        log("INFO", `Level data updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
+      } else if (r.status === "up_to_date") {
+        log("INFO", `Level data is up to date (${r.spec.repo} @ ${sha}).`);
+      } else if (r.status === "offline_fallback") {
+        log("WARN", `Network unavailable; using cached level data (${r.spec.repo} @ ${sha}). Error: ${r.error}`);
+      } else {
+        log("ERROR", `Level data sync failed for ${r.spec.repo} — no data. Error: ${r.error}`);
+      }
+      return shouldRetrySync(r.status);
+    };
+
+    startupTasks.push(
+      singleFlightSync("Gamedata levels", runLevelsSync)
+        .catch((err: unknown) => {
+          log("ERROR", `Level data sync threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`);
+          return true;
+        })
+        .then((result) => {
+          if (result !== "done") scheduleSyncRetry("Gamedata levels", runLevelsSync);
         }),
     );
   }
@@ -820,13 +960,13 @@ async function runStartupSync(): Promise<void> {
     };
 
     startupTasks.push(
-      runStorySync()
+      singleFlightSync("Storyjson", runStorySync)
         .catch((err: unknown) => {
           log("ERROR", `Storyjson sync threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`);
           return true;
         })
-        .then((needsRetry) => {
-          if (needsRetry) scheduleSyncRetry("Storyjson", runStorySync);
+        .then((result) => {
+          if (result !== "done") scheduleSyncRetry("Storyjson", runStorySync);
         }),
     );
   } else {

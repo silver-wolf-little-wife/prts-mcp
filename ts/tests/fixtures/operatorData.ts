@@ -6,6 +6,7 @@ export const REQUIRED_OPERATOR_FILES = [
   "handbook_info_table.json",
   "charword_table.json",
   "story_review_table.json",
+  "item_table.json",
 ] as const;
 
 function writeJson(path: string, data: unknown): void {
@@ -64,4 +65,5 @@ export function writeMinimalGamedata(root: string): void {
     },
   });
   writeJson(join(excel, "story_review_table.json"), {});
+  writeJson(join(excel, "item_table.json"), { items: {} });
 }

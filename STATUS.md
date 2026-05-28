@@ -1,6 +1,6 @@
 # PRTS-MCP 项目状态
 
-_Last updated: 2026-05-25_
+_Last updated: 2026-05-28_
 
 ## 当前版本
 
@@ -9,8 +9,9 @@ _Last updated: 2026-05-25_
 | Python | 1.5.0 | stable |
 | TypeScript | 1.5.0 | stable |
 
-- 公共工具面：24 个 MCP 工具（1.x 冻结）
-- 兼容性合约：1.x 期间工具名和必填参数不变
+- 当前稳定发布：24 个 MCP 工具（1.5.0）
+- main 分支开发中：29 个 MCP 工具（1.6.0 目标，新增关卡敌人融合与物品/材料域）
+- 兼容性合约：1.x 期间既有工具名和必填参数不变；minor 版本允许新增工具和可选参数
 
 ## 仓库结构
 
@@ -51,11 +52,12 @@ PRTS-MCP/
 
 | 数据源 | 用途 | 同步方式 |
 |--------|------|----------|
-| [ArknightsGameData](https://github.com/3aKHP/ArknightsGameData) | 干员/敌人档案/语音/基础信息 | GitHub Release `zh_CN-excel.zip` |
+| [ArknightsGameData](https://github.com/3aKHP/ArknightsGameData) | 干员/敌人/关卡/物品表格 | GitHub Release `zh_CN-excel.zip` |
+| [ArknightsGameData](https://github.com/3aKHP/ArknightsGameData) | 关卡实际出怪与关卡级敌人数值 | GitHub Release `zh_CN-levels.zip` |
 | [ArknightsStoryJson](https://github.com/3aKHP/ArknightsStoryJson) | 剧情台词 | GitHub Release `zh_CN.zip` |
 | [PRTS Wiki API](https://prts.wiki/api.php) | 世界观词条/阵营设定 | 实时 HTTP 请求 |
 
-## 工具清单 (24)
+## 工具清单 (29, main)
 
 | # | 工具 | 数据源 | 版本 |
 |---|------|--------|------|
@@ -80,9 +82,14 @@ PRTS-MCP/
 | 19 | `list_enemies` | GameData | 1.4.0 |
 | 20 | `get_enemy_info` | GameData | 1.4.0 |
 | 21 | `search_enemies` | GameData | 1.4.0 |
-| 22 | `list_stages` | GameData | 1.5.0 |
-| 23 | `get_stage_info` | GameData | 1.5.0 |
-| 24 | `search_stages` | GameData | 1.5.0 |
+| 22 | `get_stage_enemies` | GameData levels | 1.6.0 |
+| 23 | `get_enemy_appearances` | GameData levels | 1.6.0 |
+| 24 | `list_stages` | GameData | 1.5.0 |
+| 25 | `get_stage_info` | GameData | 1.5.0 |
+| 26 | `search_stages` | GameData | 1.5.0 |
+| 27 | `list_items` | GameData | 1.6.0 |
+| 28 | `get_item_info` | GameData | 1.6.0 |
+| 29 | `search_items` | GameData | 1.6.0 |
 
 ## 遗留 TODO
 
@@ -93,6 +100,7 @@ PRTS-MCP/
 
 | 版本 | 日期 | 亮点 |
 |------|------|------|
+| 1.6.0 | planned | 关卡敌人融合 + 物品/材料域（29 工具） |
 | 1.5.0 | 2026-05-25 | 关卡数据域：list_stages、get_stage_info、search_stages（24 工具） |
 | 1.4.2 | 2026-05-25 | 修复 Streamable HTTP session pool 400 错误 |
 | 1.4.1 | 2026-05-19 | 生产修复：ZipStore 缓存、session 泄漏、httpx 复用、审计 parity |

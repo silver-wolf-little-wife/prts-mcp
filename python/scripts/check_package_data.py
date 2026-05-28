@@ -11,7 +11,7 @@ _SRC_DIR = _PYTHON_DIR / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
-from prts_mcp.data.datasets import GAMEDATA_EXCEL, STORY_ZH_CN  # noqa: E402
+from prts_mcp.data.datasets import GAMEDATA_EXCEL, GAMEDATA_LEVELS, STORY_ZH_CN  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,6 +29,7 @@ def main() -> int:
     args = parse_args()
     data_root = args.data_root.resolve()
     gamedata_root = data_root / "gamedata"
+    levels_root = data_root / "gamedata-levels"
     story_zip = data_root / "storyjson" / STORY_ZH_CN.asset_name
 
     missing = [path for path in GAMEDATA_EXCEL.required_files if not (gamedata_root / path).is_file()]
@@ -36,6 +37,13 @@ def main() -> int:
         print("Missing bundled gamedata files:", file=sys.stderr)
         for path in missing:
             print(f" - {gamedata_root / path}", file=sys.stderr)
+        return 1
+
+    missing_levels = [path for path in GAMEDATA_LEVELS.required_files if not (levels_root / path).is_file()]
+    if missing_levels:
+        print("Missing bundled level data files:", file=sys.stderr)
+        for path in missing_levels:
+            print(f" - {levels_root / path}", file=sys.stderr)
         return 1
 
     if not story_zip.is_file():

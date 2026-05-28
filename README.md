@@ -28,8 +28,9 @@ This repository contains two independent implementations for different deploymen
 | Area | Python | TypeScript | 1.0 policy |
 |------|--------|------------|------------|
 | Current line | `1.5.0` | `1.5.0` | Stable releases are cut from the same commit when possible |
-| MCP tools | Same 24 public tool names and required parameters | Same 24 public tool names and required parameters | Tool names and required parameters stay stable through 1.x |
+| MCP tools | Same 29 public tool names and required parameters | Same 29 public tool names and required parameters | Tool names and required parameters stay stable through 1.x |
 | GameData | `GAMEDATA_PATH` or auto-synced `zh_CN-excel.zip` | `GAMEDATA_PATH` or auto-synced `zh_CN-excel.zip` | Custom paths disable auto-sync |
+| Level data | Auto-synced `zh_CN-levels.zip` beside GameData | Auto-synced `zh_CN-levels.zip` beside GameData | Custom GameData roots may provide their own `zh_CN/gamedata/levels` |
 | Story data | `STORYJSON_PATH` or auto-synced `zh_CN.zip` | `STORYJSON_PATH` or auto-synced `zh_CN.zip` | Custom zip paths disable auto-sync |
 | Bundled fallback data | Docker image only | Docker image and published npm package | PyPI remains data-light |
 
@@ -53,7 +54,7 @@ Both implementations expose the same tool set:
 | `get_story_summary(story_key)` | Single-chapter summary (LLM long summary or official one-liner) |
 | `read_story(story_key, include_narration)` | Read full dialogue for a single chapter |
 | `read_activity(event_id, include_narration, page, page_size)` | Read a complete activity's transcript, with pagination |
-| `list_search_scopes` | List available search domains (operators, stories, enemies, stages) with descriptions |
+| `list_search_scopes` | List available search domains (operators, stories, enemies, stages, items) with descriptions |
 | `search_data(pattern, scope, max_results)` | Full-text regex search across operator names, descriptions, archives, and voice lines |
 | `search_stories(pattern, character?, line_type?, context_lines?, max_results?, event_id?)` | Full-text regex search across story dialogue, narration, and choice lines with filtering |
 | `list_prts_sections(page_title)` | Section table of contents for a wiki page |
@@ -61,11 +62,16 @@ Both implementations expose the same tool set:
 | `get_prts_links(page_title, direction, limit)` | Outbound links or inbound backlinks with pagination |
 | `get_prts_template(page_title)` | Extract structured template data (key-value pairs) from a wiki page |
 | `list_enemies()` | List all enemies in the handbook with threat level and description |
-| `get_enemy_info(name)` | Retrieve full enemy handbook entry by name |
+| `get_enemy_info(name, stage_id?)` | Retrieve full enemy handbook entry by name, or stage-specific stats when `stage_id` is provided |
 | `search_enemies(pattern, max_results?)` | Full-text regex search across enemy names, descriptions, and abilities |
+| `get_stage_enemies(stage_id)` | List enemies actually spawned in a stage, with stage-specific levels and combat stats |
+| `get_enemy_appearances(name, limit?, offset?)` | Reverse lookup stages where an enemy actually spawns |
 | `list_stages(chapter?, type?, limit?, offset?)` | List stages with optional zone and stage-type filters |
 | `get_stage_info(stage_id)` | Retrieve detailed stage information by stage ID |
 | `search_stages(pattern, max_results?)` | Full-text regex search across stage names, codes, descriptions, and types |
+| `list_items(category?, limit?, offset?)` | List items/materials from `item_table.json` with optional category filtering |
+| `get_item_info(name)` | Retrieve item/material details, usage, obtain methods, drops, production, and shop links |
+| `search_items(pattern, max_results?)` | Full-text regex search across item names, descriptions, usage, obtain methods, and types |
 
 ### Quick Start
 
@@ -75,12 +81,12 @@ Both implementations expose the same tool set:
 ### Data Sources
 
 - **PRTS Wiki API** (`https://prts.wiki/api.php`) — lore articles, faction info, world-building entries
-- **ArknightsGameData** ([`3aKHP/ArknightsGameData`](https://github.com/3aKHP/ArknightsGameData)) — Release archive mirror of [`Kengxxiao/ArknightsGameData`](https://github.com/Kengxxiao/ArknightsGameData), used for operator archives, voice lines, base stats, and other game tables
+- **ArknightsGameData** ([`3aKHP/ArknightsGameData`](https://github.com/3aKHP/ArknightsGameData)) — Release archive mirror of [`Kengxxiao/ArknightsGameData`](https://github.com/Kengxxiao/ArknightsGameData), used for operator archives, voice lines, base stats, enemies, stages, items, and level combat data (`zh_CN-excel.zip` + `zh_CN-levels.zip`)
 - **ArknightsStoryJson** ([`3aKHP/ArknightsStoryJson`](https://github.com/3aKHP/ArknightsStoryJson)) — parsed story dialogue, auto-synced from GitHub Releases (`zh_CN.zip`)
 
-Game data lives in the `gamedata` volume. Story data lives in the `storyjson` volume. Both are auto-synced in the background after the server starts listening.
+Game data lives in the `gamedata` volume. Level combat data lives in the `gamedata-levels` volume. Story data lives in the `storyjson` volume. All three are auto-synced in the background after the server starts listening.
 
-Published Docker images and the npm package include bundled fallback game/story data prepared by CI. The PyPI package stays lightweight and does not embed these data files; it relies on startup auto-sync or user-provided data paths.
+Published Docker images and the npm package include bundled fallback game/level/story data prepared by CI. The PyPI package stays lightweight and does not embed these data files; it relies on startup auto-sync or user-provided data paths.
 
 ---
 
@@ -104,8 +110,9 @@ Published Docker images and the npm package include bundled fallback game/story 
 | 范围 | Python | TypeScript | 1.0 策略 |
 |------|--------|------------|----------|
 | 当前版本线 | `1.5.0` | `1.5.0` | 稳定发布尽量从同一 commit 发布 |
-| MCP 工具 | 相同的 24 个工具名和必填参数 | 相同的 24 个工具名和必填参数 | 1.x 期间保持工具名和必填参数稳定 |
+| MCP 工具 | 相同的 29 个工具名和必填参数 | 相同的 29 个工具名和必填参数 | 1.x 期间保持工具名和必填参数稳定 |
 | 干员数据 | `GAMEDATA_PATH` 或自动同步 `zh_CN-excel.zip` | `GAMEDATA_PATH` 或自动同步 `zh_CN-excel.zip` | 自定义路径会禁用自动同步 |
+| 关卡战斗数据 | 自动同步与 GameData 并列的 `zh_CN-levels.zip` | 自动同步与 GameData 并列的 `zh_CN-levels.zip` | 自定义 GameData 根目录可直接提供 `zh_CN/gamedata/levels` |
 | 剧情数据 | `STORYJSON_PATH` 或自动同步 `zh_CN.zip` | `STORYJSON_PATH` 或自动同步 `zh_CN.zip` | 自定义 zip 会禁用自动同步 |
 | bundled 兜底数据 | Docker 镜像 | Docker 镜像和正式 npm 包 | PyPI 继续保持轻量 |
 
@@ -128,7 +135,7 @@ Published Docker images and the npm package include bundled fallback game/story 
 | `get_story_summary(story_key)` | 获取单章梗概（LLM 长摘要或官方一句话简介） |
 | `read_story(story_key, include_narration)` | 读取单章完整台词 |
 | `read_activity(event_id, include_narration, page, page_size)` | 读取整个活动的完整剧情，支持分页 |
-| `list_search_scopes` | 列出可搜索的数据域（干员、剧情、敌人、关卡）及其内容类型 |
+| `list_search_scopes` | 列出可搜索的数据域（干员、剧情、敌人、关卡、物品）及其内容类型 |
 | `search_data(pattern, scope, max_results)` | 在干员名称、描述、档案、语音中执行全文正则搜索 |
 | `search_stories(pattern, character?, line_type?, context_lines?, max_results?, event_id?)` | 在剧情台词中执行全文正则搜索，支持按角色和台词类型过滤 |
 | `list_prts_sections(page_title)` | 获取词条的章节目录 |
@@ -136,11 +143,16 @@ Published Docker images and the npm package include bundled fallback game/story 
 | `get_prts_links(page_title, direction, limit)` | 获取词条的出链或入链，支持分页 |
 | `get_prts_template(page_title)` | 提取词条中的结构化模板键值对数据 |
 | `list_enemies()` | 列出敌方图鉴中所有敌人及其威胁等级和描述 |
-| `get_enemy_info(name)` | 获取指定敌人的详细图鉴资料 |
+| `get_enemy_info(name, stage_id?)` | 获取指定敌人的详细图鉴资料；传入 `stage_id` 时返回关卡级数值 |
 | `search_enemies(pattern, max_results?)` | 在敌人名称、描述和能力中执行全文正则搜索 |
+| `get_stage_enemies(stage_id)` | 获取指定关卡实际出场敌人及关卡级等级/战斗属性 |
+| `get_enemy_appearances(name, limit?, offset?)` | 反查指定敌人实际出现在哪些关卡 |
 | `list_stages(chapter?, type?, limit?, offset?)` | 列出关卡，支持按章节/区域和关卡类型过滤 |
 | `get_stage_info(stage_id)` | 根据关卡 ID 获取关卡详细信息 |
 | `search_stages(pattern, max_results?)` | 在关卡名称、编号、描述和类型中执行全文正则搜索 |
+| `list_items(category?, limit?, offset?)` | 列出物品/材料，支持按类别过滤和分页 |
+| `get_item_info(name)` | 获取物品/材料详情、用途、获取方式、掉落、基建产出和商店关联 |
+| `search_items(pattern, max_results?)` | 在物品名称、描述、用途、获取方式和类型中执行全文正则搜索 |
 
 ### 快速开始
 
@@ -150,10 +162,10 @@ Published Docker images and the npm package include bundled fallback game/story 
 ### 数据源
 
 - **PRTS Wiki API** (`https://prts.wiki/api.php`) — 世界观词条、阵营设定
-- **ArknightsGameData** ([`3aKHP/ArknightsGameData`](https://github.com/3aKHP/ArknightsGameData)) — [`Kengxxiao/ArknightsGameData`](https://github.com/Kengxxiao/ArknightsGameData) 的 Release 压缩包镜像，用于干员档案、语音记录、基础信息及其他游戏表
+- **ArknightsGameData** ([`3aKHP/ArknightsGameData`](https://github.com/3aKHP/ArknightsGameData)) — [`Kengxxiao/ArknightsGameData`](https://github.com/Kengxxiao/ArknightsGameData) 的 Release 压缩包镜像，用于干员档案、语音记录、基础信息、敌人、关卡、物品和关卡战斗数据（`zh_CN-excel.zip` + `zh_CN-levels.zip`）
 - **ArknightsStoryJson** ([`3aKHP/ArknightsStoryJson`](https://github.com/3aKHP/ArknightsStoryJson)) — 剧情台词解析数据，从 GitHub Releases 自动同步（`zh_CN.zip`）
 
-干员数据存放在 `gamedata` volume，剧情数据存放在 `storyjson` volume，均在服务器开始监听后于后台自动同步。
+干员/表格数据存放在 `gamedata` volume，关卡战斗数据存放在 `gamedata-levels` volume，剧情数据存放在 `storyjson` volume，均在服务器开始监听后于后台自动同步。
 
 正式发布的 Docker 镜像和 npm 包会由 CI 预置 bundled 兜底数据；PyPI 包保持轻量，不内置这些数据文件，依赖启动时 auto-sync 或用户自行提供数据路径。
 

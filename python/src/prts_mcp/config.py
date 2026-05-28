@@ -34,6 +34,8 @@ _BUNDLED_GAMEDATA_PATH = Path("/app/data/gamedata")
 # storyjson zip paths
 _DOCKER_STORYJSON_ZIP = Path("/data/storyjson/zh_CN.zip")
 _BUNDLED_STORYJSON_ZIP = Path("/app/data/storyjson/zh_CN.zip")
+_DOCKER_LEVELS_PATH = Path("/data/gamedata-levels")
+_BUNDLED_LEVELS_PATH = Path("/app/data/gamedata-levels")
 
 _REQUIRED_OPERATOR_FILES = (
     "character_table.json",
@@ -76,8 +78,26 @@ def _excel_path(gamedata_root: Path) -> Path:
     return gamedata_root / "zh_CN" / "gamedata" / "excel"
 
 
+def _levels_path(gamedata_root: Path) -> Path:
+    return gamedata_root.parent / "gamedata-levels"
+
+
+def _resolve_levels_path(gamedata_root: Path) -> Path:
+    if "GAMEDATA_PATH" in os.environ and _levels_complete(gamedata_root):
+        return gamedata_root
+    if "GAMEDATA_PATH" in os.environ:
+        return _levels_path(gamedata_root)
+    if os.environ.get("PRTS_MCP_ROOT") == "/app":
+        return _DOCKER_LEVELS_PATH
+    return _levels_path(gamedata_root)
+
+
 def _files_complete(excel: Path) -> bool:
     return all((excel / f).is_file() for f in _REQUIRED_OPERATOR_FILES)
+
+
+def _levels_complete(root: Path) -> bool:
+    return (root / "zh_CN" / "gamedata" / "levels" / "enemydata" / "enemy_database.json").is_file()
 
 
 @dataclass(frozen=True)
@@ -88,16 +108,25 @@ class Config:
 
     # Derived paths — set in __post_init__, never passed to __init__.
     excel_path: Path = field(init=False)
+    levels_path: Path = field(init=False)
     bundled_excel_path: Path = field(init=False)
+    bundled_levels_path: Path = field(init=False)
     effective_excel_path: Path | None = field(init=False)
+    effective_levels_path: Path | None = field(init=False)
     effective_storyjson_zip: Path | None = field(init=False)
 
     def __post_init__(self) -> None:
         ep = _excel_path(self.gamedata_path)
         object.__setattr__(self, "excel_path", ep)
 
+        lp = _resolve_levels_path(self.gamedata_path)
+        object.__setattr__(self, "levels_path", lp)
+
         bep = _excel_path(_BUNDLED_GAMEDATA_PATH)
         object.__setattr__(self, "bundled_excel_path", bep)
+
+        blp = _BUNDLED_LEVELS_PATH
+        object.__setattr__(self, "bundled_levels_path", blp)
 
         # effective_excel_path: the path operator.py should actually read from.
         # Prefer the volume/sync path when its files are present; fall back to
@@ -108,6 +137,13 @@ class Config:
             object.__setattr__(self, "effective_excel_path", bep)
         else:
             object.__setattr__(self, "effective_excel_path", None)
+
+        if _levels_complete(lp):
+            object.__setattr__(self, "effective_levels_path", lp)
+        elif _levels_complete(blp):
+            object.__setattr__(self, "effective_levels_path", blp)
+        else:
+            object.__setattr__(self, "effective_levels_path", None)
 
         # effective_storyjson_zip: priority — custom env var / volume path →
         # bundled zip.  Returns None when no zip is found anywhere.
@@ -127,6 +163,10 @@ class Config:
     @property
     def has_story_data(self) -> bool:
         return self.effective_storyjson_zip is not None
+
+    @property
+    def has_levels_data(self) -> bool:
+        return self.effective_levels_path is not None
 
     @property
     def missing_operator_files(self) -> tuple[Path, ...]:

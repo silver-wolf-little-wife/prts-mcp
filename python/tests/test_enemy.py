@@ -55,6 +55,7 @@ def _write_handbook(excel: Path) -> None:
 
 
 def _write_database(db_root: Path) -> None:
+    db_root.mkdir(parents=True, exist_ok=True)
     (db_root / "enemy_database.json").write_text(
         json.dumps({
             "enemies": [
@@ -97,7 +98,6 @@ def gamedata(tmp_path: Path):
     excel = tmp_path / "zh_CN" / "gamedata" / "excel"
     excel.mkdir(parents=True)
     db_root = tmp_path / "zh_CN" / "gamedata" / "levels" / "enemydata"
-    db_root.mkdir(parents=True)
 
     # Write minimum operator files so config validates
     for f in ("character_table.json", "handbook_info_table.json",
@@ -109,6 +109,26 @@ def gamedata(tmp_path: Path):
 
     with patch.dict(os.environ, {"GAMEDATA_PATH": str(tmp_path)}, clear=False):
         os.environ.pop("STORYJSON_PATH", None)
+        clear_enemy_caches()
+        yield tmp_path
+
+    clear_enemy_caches()
+
+
+@pytest.fixture
+def split_levels_gamedata(tmp_path: Path):
+    gamedata_root = tmp_path / "gamedata"
+    excel = gamedata_root / "zh_CN" / "gamedata" / "excel"
+    excel.mkdir(parents=True)
+
+    for f in ("character_table.json", "handbook_info_table.json",
+             "charword_table.json", "story_review_table.json"):
+        (excel / f).write_text("{}", encoding="utf-8")
+
+    _write_handbook(excel)
+    _write_database(tmp_path / "gamedata-levels" / "zh_CN" / "gamedata" / "levels" / "enemydata")
+
+    with patch.dict(os.environ, {"GAMEDATA_PATH": str(gamedata_root)}, clear=False):
         clear_enemy_caches()
         yield tmp_path
 
@@ -184,6 +204,11 @@ class TestGetEnemyInfo:
         # Skills
         assert "ArcticBlast" in out
         assert "duration=8.0" in out
+
+    def test_reads_database_from_sibling_levels_path(self, split_levels_gamedata):
+        out = get_enemy_info("霜星")
+        assert "**最大生命**：25,000" in out
+        assert "**免疫**：眩晕、冻结" in out
 
     def test_handbook_only_when_no_db_entry(self, gamedata):
         # 源石虫 has no entry in our minimal database fixture
