@@ -129,13 +129,28 @@ docker run -i --rm `
     "alwaysAllow": [
         "search_prts",
         "read_prts_page",
+        "list_prts_sections",
+        "get_prts_categories",
+        "get_prts_links",
+        "get_prts_template",
         "get_operator_archives",
         "get_operator_voicelines",
         "get_operator_basic_info",
+        "list_enemies",
+        "get_enemy_info",
+        "search_enemies",
+        "list_stages",
+        "get_stage_info",
+        "search_stages",
         "list_story_events",
         "list_stories",
+        "get_event_summary",
+        "get_story_summary",
         "read_story",
-        "read_activity"
+        "read_activity",
+        "list_search_scopes",
+        "search_data",
+        "search_stories"
     ]
 }
 ```
@@ -169,19 +184,34 @@ docker run -i --rm -v prts-mcp-data:/data/gamedata -v prts-mcp-storyjson:/data/s
 npx @modelcontextprotocol/inspector docker run -i --rm -v prts-mcp-data:/data/gamedata -v prts-mcp-storyjson:/data/storyjson prts-mcp
 ```
 
-预期能看到 9 个 Tool：
+预期能看到 24 个 Tool，以下是按数据域挑选的 smoke 参数：
 
 | Tool | 测试参数 | 依赖 |
 |------|---------|------|
 | `search_prts` | `query`: `莱茵生命` | 网络 |
 | `read_prts_page` | `page_title`: `阿米娅` | 网络 |
+| `list_prts_sections` | `page_title`: `阿米娅` | 网络 |
+| `get_prts_categories` | `page_title`: `阿米娅` | 网络 |
+| `get_prts_links` | `page_title`: `阿米娅`, `direction`: `outbound` | 网络 |
+| `get_prts_template` | `page_title`: `阿米娅` | 网络 |
 | `get_operator_archives` | `operator_name`: `阿米娅` | 干员数据 |
 | `get_operator_voicelines` | `operator_name`: `阿米娅` | 干员数据 |
 | `get_operator_basic_info` | `operator_name`: `阿米娅` | 干员数据 |
+| `list_enemies` | `threat_level`: `boss` | 干员数据 |
+| `get_enemy_info` | `name`: `源石虫` | 干员数据 |
+| `search_enemies` | `pattern`: `萨卡兹` | 干员数据 |
+| `list_stages` | `type`: `MAIN` | 干员数据 |
+| `get_stage_info` | `stage_id`: `main_00-01` | 干员数据 |
+| `search_stages` | `pattern`: `切尔诺伯格` | 干员数据 |
 | `list_story_events` | `category`: `activities` | 剧情数据 |
 | `list_stories` | `event_id`: `act31side` | 剧情数据 |
+| `get_event_summary` | `event_id`: `act31side` | 剧情数据 |
+| `get_story_summary` | `story_key`: `activities/act31side/level_act31side_01_beg` | 剧情数据 |
 | `read_story` | `story_key`: `activities/act31side/level_act31side_01_beg` | 剧情数据 |
 | `read_activity` | `event_id`: `act31side`, `page`: `1` | 剧情数据 |
+| `list_search_scopes` | 无参数 | 混合 |
+| `search_data` | `pattern`: `阿米娅` | 干员数据 |
+| `search_stories` | `pattern`: `博士`, `event_id`: `act31side` | 剧情数据 |
 
 ---
 

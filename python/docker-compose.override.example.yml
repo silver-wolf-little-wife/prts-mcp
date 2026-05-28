@@ -8,12 +8,16 @@ services:
       # Optional: set GAMEDATA_PATH to use your own data directory.
       # WARNING: setting this disables auto-sync entirely.
       # GAMEDATA_PATH: /data/custom
+      # Optional: set STORYJSON_PATH to use your own local zh_CN.zip.
+      # WARNING: setting this disables story auto-sync entirely.
+      # STORYJSON_PATH: /data/custom-storyjson/zh_CN.zip
     volumes:
       # Recommended: mount a named volume for persistent data across restarts.
       # Use this pattern in docker-compose.override.yml (copy this file):
       #
       #   volumes:
       #     - prts-mcp-data:/data/gamedata
+      #     - prts-mcp-storyjson:/data/storyjson
       #
       # Alternatively, bind-mount your own ArknightsGameData repo root (read-only).
       # The server expects zh_CN/gamedata/excel/*.json under the mounted path.
@@ -21,3 +25,6 @@ services:
       #
       # Linux/macOS: - /absolute/path/to/ArknightsGameData:/data/custom:ro
       # Windows:     - C:\path\to\ArknightsGameData:/data/custom:ro
+      #
+      # For custom story data, mount the directory containing zh_CN.zip and set
+      # STORYJSON_PATH to the zip file path.

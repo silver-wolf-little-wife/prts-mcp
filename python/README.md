@@ -2,14 +2,14 @@
 
 明日方舟同人创作辅助 MCP Server，Python 版本。通过 **stdio 传输**接入 MCP 客户端（Claude Desktop、Claude Code、Chatbox 等），支持 Docker 部署。
 
-提供工具集：`search_prts` / `read_prts_page` / `get_operator_archives` / `get_operator_voicelines` / `get_operator_basic_info` / `list_story_events` / `list_stories` / `read_story` / `read_activity`
+提供 24 个 MCP 工具：PRTS 词条检索与页面结构、干员档案/语音/基础信息、剧情活动与台词、全文搜索、敌人图鉴，以及关卡查询。完整清单见仓库根目录 [`README.md`](../README.md)。
 
 ---
 
 ## 快速开始（Docker）
 
 ```bash
-# 从仓库根目录构建（需先预置数据，详见下方）
+# 从仓库根目录构建（可选预置 bundled 数据，详见下方）
 docker build -f python/Dockerfile -t prts-mcp .
 
 # 运行（named volume 持久化游戏数据，推荐）

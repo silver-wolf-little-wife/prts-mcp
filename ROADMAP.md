@@ -1,6 +1,6 @@
 # PRTS-MCP Roadmap
 
-_Last updated: 2026-05-19_ · [中文版](ROADMAP.zh-CN.md)
+_Last updated: 2026-05-28_ · [中文版](ROADMAP.zh-CN.md)
 
 PRTS-MCP is past 1.0. The public tool surface and data architecture are under a 1.x compatibility contract. This document tracks **what comes next** — not what has shipped. For shipped features, see the Python and TypeScript CHANGELOGs.
 
@@ -8,7 +8,7 @@ PRTS-MCP is past 1.0. The public tool surface and data architecture are under a 
 
 - Python: `1.5.0`
 - TypeScript: `1.5.0`
-- 21 public MCP tools, frozen in the 1.x line (CI-enforced).
+- 24 public MCP tools, frozen in the 1.x line (CI-enforced).
 - See [migration guide](docs/migration-0.x-to-1.0.md) for the
   0.x → 1.0 transition.
 
@@ -43,23 +43,16 @@ Patch releases (1.x.y) are limited to bug fixes, documentation, and non-breaking
 
 ## Minor Release Plan
 
-Each minor version carries one main data domain. Cross-source fusion tools ride along with the version that introduces their dependency.
+Each minor version carries one main data domain. Cross-source fusion tools ship with or after the version that introduces their dependency.
 
-### 1.5.0 — Stage Domain + Cross-Source Fusion
+### 1.6.0 — Stage Cross-Source Fusion + Item/Material Domain
 
-**Main: stage data domain**
-- `list_stages(chapter?, type?)` — list stages (main story / activity).
-- `get_stage_info(stage_id)` — stage details: map, waves, enemy roster.
-- `search_stages(pattern)` — regex search across stage names and tags.
-
-**Cross-source fusion (depends on stage data)**
+**Stage cross-source fusion**
 - `get_stage_enemies(stage_id)` — enemies in that stage with **stage-specific**
   stats (not the level-0 default exposed by `get_enemy_info`).
 - `get_enemy_appearances(name)` — reverse lookup: which stages feature this enemy.
 - `get_enemy_info(name)` gains an optional `stage_id` parameter that returns
   stats for that stage's level variant.
-
-### 1.6.0 — Item/Material Domain + Story Character Tracking
 
 **Main: item data domain**
 - `list_items(category?)` — items grouped by category (materials, devices,
@@ -67,15 +60,15 @@ Each minor version carries one main data domain. Cross-source fusion tools ride 
 - `get_item_info(name)` — item details: usage, obtain methods.
 - `search_items(pattern)` — regex search.
 
+### 1.7.0 — Story Character Tracking + Operator Depth
+
 **Story character tracking (no new data source — indexes existing story JSON)**
 - `find_character_appearances(name, scope?)` — chapters / events where the
   character speaks or is mentioned.
 - `find_speakers_in(event_id)` — every speaker who appears in an event.
 
-### 1.7.0 — Operator Depth (Building + Skins)
-
 **Main: building (base) skill data domain**
-- `get_operator_building_skills(name)` — base skills, efficiency, sloting.
+- `get_operator_building_skills(name)` — base skills, efficiency, slotting.
 - `search_building_skills(building_type, pattern)` — cross-operator skill search.
 
 **Skins**
@@ -119,11 +112,11 @@ Three structural shifts that warrant a major bump.
 
 ### Tool surface consolidation (context budget)
 
-The 1.x tool surface keeps growing (21 tools at 1.4.0, projected 30+ by 1.8.0). For long-context flagship models this is fine; for 128K-class models, every additional tool schema eats into the prompt budget and hurts tool-selection accuracy.
+The 1.x tool surface keeps growing (24 tools at 1.5.0, projected 30+ by 1.8.0). For long-context flagship models this is fine; for 128K-class models, every additional tool schema eats into the prompt budget and hurts tool-selection accuracy.
 
 **Background**: MCP currently has no protocol-level support for deferred tool loading. Closed proposals: lazy hydration (#1978), lazyRegistration (#2376). Open drafts: tool-search query (#1821), token-bloat mitigations (#1576). Claude Code's ToolSearch is an Anthropic-API-level feature (`tool_reference` blocks), not portable to Cursor/Cline/Chatbox.
 
-**Approach**: server-side consolidation by *schema shape*, not by data domain. Merge tools that share parameter structure and output shape; keep tools whose semantics genuinely differ. Estimated reduction: 21 → ~14 tools (about a third) without losing capability.
+**Approach**: server-side consolidation by *schema shape*, not by data domain. Merge tools that share parameter structure and output shape; keep tools whose semantics genuinely differ. Estimated reduction: 24 → ~16 tools (about a third) without losing capability.
 
 **Phase 1 (within 1.x, deprecated aliases)**:
 
@@ -199,7 +192,7 @@ Today the implementations have de-facto roles: Python is recommended for Docker 
    and tool-alias removal are prepared throughout 1.x, not announced at
    the last minute.
 4. **Bind cross-source fusion to its data dependency** — `get_stage_enemies`
-   ships with stages, not before.
+   ships after the stage data domain, not before it.
 5. **Consolidate by schema shape, not by domain** — merging tools that
    share parameter structure preserves selection accuracy; merging by
    "everything operator-related" doesn't.

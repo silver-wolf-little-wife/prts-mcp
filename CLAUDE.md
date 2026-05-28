@@ -14,7 +14,7 @@ PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio
 | 项目现状、版本状态、仓库结构 | [`STATUS.md`](STATUS.md) |
 | 代码规范、反模式、已知陷阱 | [`docs/dev/STYLE.md`](docs/dev/STYLE.md) |
 | 路线图与未来规划 | [`ROADMAP.md`](ROADMAP.md) |
-| 外部贡献者指南 | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| 外部贡献者指南 | [`python/CONTRIBUTING.md`](python/CONTRIBUTING.md) |
 | Python 实现 | [`python/`](python/) |
 | TypeScript 实现 | [`ts/`](ts/) |
 

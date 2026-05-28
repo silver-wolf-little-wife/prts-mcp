@@ -2,18 +2,18 @@
 
 明日方舟同人创作辅助 MCP Server，TypeScript 版本。通过 **Streamable HTTP 传输**（单端点 `/mcp`）对外提供服务，适合部署在个人服务器或云环境，供他人通过 HTTP 接入。
 
-提供工具集：`search_prts` / `read_prts_page` / `get_operator_archives` / `get_operator_voicelines` / `get_operator_basic_info` / `list_story_events` / `list_stories` / `read_story` / `read_activity`
+提供 24 个 MCP 工具：PRTS 词条检索与页面结构、干员档案/语音/基础信息、剧情活动与台词、全文搜索、敌人图鉴，以及关卡查询。完整清单见仓库根目录 [`README.md`](../README.md)。
 
 ---
 
 ## 快速开始（Docker）
 
 ```bash
-# 从仓库根目录构建（需先预置数据，详见下方）
+# 从仓库根目录构建（可选预置 bundled 数据，详见下方）
 docker build -f ts/Dockerfile -t prts-mcp-ts .
 
 # 运行（named volume 持久化游戏数据，推荐）
-docker run -d -p 3000:3000 -v prts-mcp-ts-data:/data/gamedata prts-mcp-ts
+docker run -d -p 3000:3000 -v prts-mcp-ts-data:/data/gamedata -v prts-mcp-ts-storyjson:/data/storyjson prts-mcp-ts
 ```
 
 服务启动后 MCP 端点为 `http://<host>:3000/mcp`，健康检查端点为 `http://<host>:3000/health`。

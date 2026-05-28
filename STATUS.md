@@ -9,7 +9,7 @@ _Last updated: 2026-05-25_
 | Python | 1.5.0 | stable |
 | TypeScript | 1.5.0 | stable |
 
-- 公共工具面：21 个 MCP 工具（1.x 冻结）
+- 公共工具面：24 个 MCP 工具（1.x 冻结）
 - 兼容性合约：1.x 期间工具名和必填参数不变
 
 ## 仓库结构

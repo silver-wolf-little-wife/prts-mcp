@@ -27,8 +27,8 @@ This repository contains two independent implementations for different deploymen
 
 | Area | Python | TypeScript | 1.0 policy |
 |------|--------|------------|------------|
-| Current line | `1.3.0` | `1.3.0` | Stable releases are cut from the same commit when possible |
-| MCP tools | Same 17 public tool names and required parameters | Same 17 public tool names and required parameters | Tool names and required parameters stay stable through 1.x |
+| Current line | `1.5.0` | `1.5.0` | Stable releases are cut from the same commit when possible |
+| MCP tools | Same 24 public tool names and required parameters | Same 24 public tool names and required parameters | Tool names and required parameters stay stable through 1.x |
 | GameData | `GAMEDATA_PATH` or auto-synced `zh_CN-excel.zip` | `GAMEDATA_PATH` or auto-synced `zh_CN-excel.zip` | Custom paths disable auto-sync |
 | Story data | `STORYJSON_PATH` or auto-synced `zh_CN.zip` | `STORYJSON_PATH` or auto-synced `zh_CN.zip` | Custom zip paths disable auto-sync |
 | Bundled fallback data | Docker image only | Docker image and published npm package | PyPI remains data-light |
@@ -53,7 +53,7 @@ Both implementations expose the same tool set:
 | `get_story_summary(story_key)` | Single-chapter summary (LLM long summary or official one-liner) |
 | `read_story(story_key, include_narration)` | Read full dialogue for a single chapter |
 | `read_activity(event_id, include_narration, page, page_size)` | Read a complete activity's transcript, with pagination |
-| `list_search_scopes` | List available search domains (operators, stories) with descriptions |
+| `list_search_scopes` | List available search domains (operators, stories, enemies, stages) with descriptions |
 | `search_data(pattern, scope, max_results)` | Full-text regex search across operator names, descriptions, archives, and voice lines |
 | `search_stories(pattern, character?, line_type?, context_lines?, max_results?, event_id?)` | Full-text regex search across story dialogue, narration, and choice lines with filtering |
 | `list_prts_sections(page_title)` | Section table of contents for a wiki page |
@@ -63,6 +63,9 @@ Both implementations expose the same tool set:
 | `list_enemies()` | List all enemies in the handbook with threat level and description |
 | `get_enemy_info(name)` | Retrieve full enemy handbook entry by name |
 | `search_enemies(pattern, max_results?)` | Full-text regex search across enemy names, descriptions, and abilities |
+| `list_stages(chapter?, type?, limit?, offset?)` | List stages with optional zone and stage-type filters |
+| `get_stage_info(stage_id)` | Retrieve detailed stage information by stage ID |
+| `search_stages(pattern, max_results?)` | Full-text regex search across stage names, codes, descriptions, and types |
 
 ### Quick Start
 
@@ -100,8 +103,8 @@ Published Docker images and the npm package include bundled fallback game/story 
 
 | 范围 | Python | TypeScript | 1.0 策略 |
 |------|--------|------------|----------|
-| 当前版本线 | `1.3.0` | `1.3.0` | 稳定发布尽量从同一 commit 发布 |
-| MCP 工具 | 相同的 17 个工具名和必填参数 | 相同的 17 个工具名和必填参数 | 1.x 期间保持工具名和必填参数稳定 |
+| 当前版本线 | `1.5.0` | `1.5.0` | 稳定发布尽量从同一 commit 发布 |
+| MCP 工具 | 相同的 24 个工具名和必填参数 | 相同的 24 个工具名和必填参数 | 1.x 期间保持工具名和必填参数稳定 |
 | 干员数据 | `GAMEDATA_PATH` 或自动同步 `zh_CN-excel.zip` | `GAMEDATA_PATH` 或自动同步 `zh_CN-excel.zip` | 自定义路径会禁用自动同步 |
 | 剧情数据 | `STORYJSON_PATH` 或自动同步 `zh_CN.zip` | `STORYJSON_PATH` 或自动同步 `zh_CN.zip` | 自定义 zip 会禁用自动同步 |
 | bundled 兜底数据 | Docker 镜像 | Docker 镜像和正式 npm 包 | PyPI 继续保持轻量 |
@@ -125,7 +128,7 @@ Published Docker images and the npm package include bundled fallback game/story 
 | `get_story_summary(story_key)` | 获取单章梗概（LLM 长摘要或官方一句话简介） |
 | `read_story(story_key, include_narration)` | 读取单章完整台词 |
 | `read_activity(event_id, include_narration, page, page_size)` | 读取整个活动的完整剧情，支持分页 |
-| `list_search_scopes` | 列出可搜索的数据域（干员、剧情）及其内容类型 |
+| `list_search_scopes` | 列出可搜索的数据域（干员、剧情、敌人、关卡）及其内容类型 |
 | `search_data(pattern, scope, max_results)` | 在干员名称、描述、档案、语音中执行全文正则搜索 |
 | `search_stories(pattern, character?, line_type?, context_lines?, max_results?, event_id?)` | 在剧情台词中执行全文正则搜索，支持按角色和台词类型过滤 |
 | `list_prts_sections(page_title)` | 获取词条的章节目录 |
@@ -135,6 +138,9 @@ Published Docker images and the npm package include bundled fallback game/story 
 | `list_enemies()` | 列出敌方图鉴中所有敌人及其威胁等级和描述 |
 | `get_enemy_info(name)` | 获取指定敌人的详细图鉴资料 |
 | `search_enemies(pattern, max_results?)` | 在敌人名称、描述和能力中执行全文正则搜索 |
+| `list_stages(chapter?, type?, limit?, offset?)` | 列出关卡，支持按章节/区域和关卡类型过滤 |
+| `get_stage_info(stage_id)` | 根据关卡 ID 获取关卡详细信息 |
+| `search_stages(pattern, max_results?)` | 在关卡名称、编号、描述和类型中执行全文正则搜索 |
 
 ### 快速开始
 
