@@ -77,4 +77,7 @@ def write_minimal_gamedata(root: Path) -> Path:
         encoding="utf-8",
     )
     (excel / "story_review_table.json").write_text("{}", encoding="utf-8")
+    (excel / "item_table.json").write_text(
+        json.dumps({"items": {}}, ensure_ascii=False), encoding="utf-8"
+    )
     return excel

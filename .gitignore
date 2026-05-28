@@ -31,16 +31,23 @@ ts/*.tgz
 # TS npm bundled data — directories tracked, content downloaded by CI at publish time
 ts/data/*
 !ts/data/gamedata/
+!ts/data/gamedata-levels/
 !ts/data/storyjson/
 !ts/data/gamedata/.gitkeep
+!ts/data/gamedata-levels/.gitkeep
 !ts/data/storyjson/.gitkeep
 
 data/*
 !data/.gitkeep
 !data/gamedata/
+!data/gamedata-levels/
 !data/storyjson/
 !data/gamedata/**
+!data/gamedata-levels/.gitkeep
 !data/storyjson/.gitkeep
 data/gamedata/archives/
 data/gamedata/**/*.zip
 data/gamedata/**/*.7z
+data/gamedata-levels/archives/
+data/gamedata-levels/**/*.zip
+data/gamedata-levels/**/*.7z

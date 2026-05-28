@@ -3,7 +3,21 @@ from __future__ import annotations
 import json
 import zipfile
 
-from prts_mcp.data.datasets import STORY_ZH_CN
+from prts_mcp.data.datasets import GAMEDATA_EXCEL, GAMEDATA_LEVELS, STORY_ZH_CN
+
+
+def test_gamedata_excel_requires_current_public_tool_tables():
+    assert "zh_CN/gamedata/excel/enemy_handbook_table.json" in GAMEDATA_EXCEL.required_files
+    assert "zh_CN/gamedata/excel/item_table.json" in GAMEDATA_EXCEL.required_files
+    assert "zh_CN/gamedata/excel/stage_table.json" in GAMEDATA_EXCEL.required_files
+
+
+def test_gamedata_levels_spec_requires_enemy_database():
+    assert GAMEDATA_LEVELS.dataset_id == "gamedata.levels"
+    assert GAMEDATA_LEVELS.asset_name == "zh_CN-levels.zip"
+    assert GAMEDATA_LEVELS.required_files == (
+        "zh_CN/gamedata/levels/enemydata/enemy_database.json",
+    )
 
 
 def test_storyjson_zip_requires_referenced_story_files(tmp_path):

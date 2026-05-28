@@ -21,6 +21,6 @@ ENV PRTS_MCP_ROOT=/app
 # populate it with the named-volume or bind-mount contents at runtime;
 # if no volume is attached it remains writable by the container so
 # auto-sync can still write data here (data lost on container removal).
-RUN mkdir -p /data/gamedata /data/storyjson
+RUN mkdir -p /data/gamedata /data/gamedata-levels /data/storyjson
 
 ENTRYPOINT ["prts-mcp"]

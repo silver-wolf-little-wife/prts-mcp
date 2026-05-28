@@ -125,6 +125,21 @@ function writeFixtures(root: string): void {
 
   writeFileSync(join(excel, "stage_table.json"), JSON.stringify(stages), "utf-8");
   writeFileSync(join(excel, "zone_table.json"), JSON.stringify(zones), "utf-8");
+  writeFileSync(
+    join(excel, "item_table.json"),
+    JSON.stringify({
+      items: {
+        "7001": {
+          itemId: "7001",
+          name: "招聘许可",
+          hideInItemGet: false,
+          classifyType: "NORMAL",
+          itemType: "TKT_RECRUIT",
+        },
+      },
+    }),
+    "utf-8",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,7 +266,7 @@ test("getStageInfo full info", async () => {
   assert.match(out, /序章-黑暗时代·上/);
   assert.match(out, /6/);
   assert.match(out, /三点方向/);
-  assert.match(out, /TKT_RECRUIT/);
+  assert.match(out, /招聘许可（7001）/);
   assert.match(out, /无条件/);
   assert.match(out, /main_00-01#f#/);
 });

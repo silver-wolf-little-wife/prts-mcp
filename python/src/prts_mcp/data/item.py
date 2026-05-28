@@ -1,0 +1,311 @@
+from __future__ import annotations
+
+import re
+from functools import lru_cache
+from typing import Any
+
+from prts_mcp.config import Config
+from prts_mcp.data.stores import DirectoryStore
+
+
+_ITEM_FILE = "item_table.json"
+
+_CLASSIFY_LABELS: dict[str, str] = {
+    "MATERIAL": "材料",
+    "NORMAL": "普通",
+    "CONSUME": "消耗品",
+    "NONE": "其他",
+}
+
+_OCCURRENCE_LABELS: dict[str, str] = {
+    "ALWAYS": "固定",
+    "ALMOST": "大概率",
+    "USUAL": "常规",
+    "OFTEN": "较高概率",
+    "SOMETIMES": "小概率",
+}
+
+_CATEGORY_ALIASES: dict[str, str] = {
+    "MATERIALS": "MATERIAL",
+    "材料": "MATERIAL",
+    "物资": "MATERIAL",
+    "NORMAL": "NORMAL",
+    "普通": "NORMAL",
+    "CONSUME": "CONSUME",
+    "消耗品": "CONSUME",
+    "NONE": "NONE",
+    "其他": "NONE",
+}
+
+
+def _get_config() -> Config:
+    return Config.load()
+
+
+def _store() -> DirectoryStore:
+    ep = _get_config().effective_excel_path
+    if ep is None:
+        raise RuntimeError("effective_excel_path is None — GAMEDATA_PATH may be unset")
+    return DirectoryStore(ep)
+
+
+def _missing_data_message() -> str:
+    config = _get_config()
+    return (
+        "物品数据暂不可用。请检查 GAMEDATA_PATH 配置，"
+        "或等待服务器自动从 GitHub Release 同步数据完成后重试。"
+        f"（当前同步目标路径：{config.excel_path}）"
+    )
+
+
+def _normalize_category(category: str) -> str:
+    key = category.strip().upper()
+    return _CATEGORY_ALIASES.get(key, _CATEGORY_ALIASES.get(category.strip(), key))
+
+
+def _rarity_label(raw: str) -> str:
+    return raw.replace("TIER_", "T") if raw.startswith("TIER_") else raw
+
+
+def _classify_label(raw: str) -> str:
+    return _CLASSIFY_LABELS.get(raw, raw or "-")
+
+
+def _occurrence_label(raw: str) -> str:
+    return _OCCURRENCE_LABELS.get(raw, raw or "?")
+
+
+def _short_text(text: str, limit: int = 80) -> str:
+    text = " ".join(text.split())
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
+@lru_cache(maxsize=1)
+def _load_items() -> dict[str, dict[str, Any]]:
+    store = _store()
+    if not store.exists(_ITEM_FILE):
+        raise FileNotFoundError(f"物品数据文件不存在：{store.root / _ITEM_FILE}。")
+    raw = store.read_json(_ITEM_FILE)
+    if not isinstance(raw, dict):
+        raise TypeError(f"{_ITEM_FILE} top-level shape mismatch")
+    items = raw.get("items")
+    if not isinstance(items, dict):
+        raise TypeError(f"{_ITEM_FILE} missing 'items' dict")
+    return items
+
+
+@lru_cache(maxsize=1)
+def _build_item_lookup() -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for item_id, info in _load_items().items():
+        mapping[str(item_id)] = str(item_id)
+        name = info.get("name")
+        if name:
+            mapping.setdefault(str(name), str(item_id))
+    return mapping
+
+
+def clear_item_caches() -> None:
+    _load_items.cache_clear()
+    _build_item_lookup.cache_clear()
+
+
+def get_item_name_by_id(item_id: str) -> str | None:
+    """Return an item display name for stage/drop formatting."""
+    if not item_id:
+        return None
+    try:
+        item = _load_items().get(item_id)
+    except (FileNotFoundError, RuntimeError, TypeError):
+        return None
+    if not item:
+        return None
+    name = item.get("name")
+    return str(name) if name else None
+
+
+def _resolve_item_id(name: str) -> str | None:
+    return _build_item_lookup().get(name)
+
+
+def _visible_items() -> list[tuple[str, dict[str, Any]]]:
+    return [
+        (item_id, info)
+        for item_id, info in _load_items().items()
+        if not info.get("hideInItemGet") and info.get("name")
+    ]
+
+
+def _format_stage_drops(drop_list: list[dict[str, Any]], max_entries: int = 12) -> str:
+    if not drop_list:
+        return "（无）"
+    parts: list[str] = []
+    for entry in sorted(drop_list, key=lambda e: e.get("sortId", 9999))[:max_entries]:
+        stage_id = entry.get("stageId") or "?"
+        occ = _occurrence_label(str(entry.get("occPer") or ""))
+        parts.append(f"- {stage_id}（{occ}）")
+    if len(drop_list) > max_entries:
+        parts.append(f"- ...另有 {len(drop_list) - max_entries} 个关卡")
+    return "\n".join(parts)
+
+
+def _format_related(label: str, entries: Any) -> list[str]:
+    if not isinstance(entries, list) or not entries:
+        return []
+    lines = [f"\n## {label}"]
+    for entry in entries[:10]:
+        if isinstance(entry, dict):
+            bits = [f"{k}={v}" for k, v in entry.items() if v not in (None, "")]
+            lines.append("- " + ("，".join(bits) if bits else "（空）"))
+        else:
+            lines.append(f"- {entry}")
+    if len(entries) > 10:
+        lines.append(f"- ...另有 {len(entries) - 10} 条")
+    return lines
+
+
+def list_items(
+    category: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> str:
+    """List visible items with optional classifyType/itemType filtering."""
+    if limit < 1:
+        return "limit 必须 >= 1。"
+    if limit > 200:
+        return "limit 必须 <= 200。"
+    if offset < 0:
+        return "offset 必须 >= 0。"
+
+    try:
+        entries = _visible_items()
+    except (FileNotFoundError, RuntimeError, TypeError) as exc:
+        return _missing_data_message() + f"（{exc}）"
+
+    category_filter = _normalize_category(category) if category else None
+    if category_filter:
+        entries = [
+            (item_id, info)
+            for item_id, info in entries
+            if info.get("classifyType") == category_filter or info.get("itemType") == category_filter
+        ]
+
+    entries.sort(key=lambda kv: (kv[1].get("sortId", 999999), kv[0]))
+    total = len(entries)
+    page = entries[offset : offset + limit]
+
+    if not page:
+        if total == 0:
+            return f"没有匹配的物品（category={category or 'none'}）。"
+        return f"offset {offset} 超出范围（共 {total} 条）。"
+
+    title = f"# 物品列表（共 {total} 个）"
+    if category:
+        title = f"# 物品列表：{category}（共 {total} 个）"
+    lines = [title]
+    for item_id, info in page:
+        name = info.get("name") or "（无名）"
+        rarity = _rarity_label(str(info.get("rarity") or ""))
+        classify = _classify_label(str(info.get("classifyType") or ""))
+        item_type = info.get("itemType") or "-"
+        usage = _short_text(str(info.get("usage") or info.get("description") or ""))
+        line = f"- **{name}** [{classify}/{item_type}] {rarity}（id: {item_id}）"
+        if usage:
+            line += f" — {usage}"
+        lines.append(line)
+
+    start = offset + 1
+    end = min(offset + limit, total)
+    lines.append(
+        f"\n（显示第 {start}–{end} 条，共 {total} 条。"
+        f"使用 offset={offset + limit} 查看下一页）"
+    )
+    return "\n".join(lines)
+
+
+def get_item_info(name: str) -> str:
+    """Return detailed information for an item by Chinese name or item ID."""
+    try:
+        item_id = _resolve_item_id(name)
+    except (FileNotFoundError, RuntimeError, TypeError) as exc:
+        return _missing_data_message() + f"（{exc}）"
+    if item_id is None:
+        return f"未找到物品：{name!r}。"
+
+    info = _load_items().get(item_id)
+    if info is None:
+        return f"物品 {name!r} 暂无详细信息。"
+
+    item_name = info.get("name") or name
+    parts = [f"# {item_name} — 物品信息", "", "## 基本信息"]
+    parts.append(f"- **ID**：{item_id}")
+    parts.append(f"- **稀有度**：{_rarity_label(str(info.get('rarity') or ''))}")
+    parts.append(f"- **分类**：{_classify_label(str(info.get('classifyType') or ''))}")
+    parts.append(f"- **类型**：{info.get('itemType') or '-'}")
+    icon = info.get("iconId")
+    if icon:
+        parts.append(f"- **图标**：{icon}")
+    obtain = info.get("obtainApproach")
+    if obtain:
+        parts.append(f"- **获取方式**：{obtain}")
+
+    desc = info.get("description")
+    usage = info.get("usage")
+    if desc:
+        parts.extend(["", "## 描述", str(desc)])
+    if usage:
+        parts.extend(["", "## 用途", str(usage)])
+
+    parts.extend(["", "## 掉落关卡", _format_stage_drops(info.get("stageDropList") or [])])
+    parts.extend(_format_related("基建产出", info.get("buildingProductList")))
+    parts.extend(_format_related("商店关联", info.get("shopRelateInfoList")))
+    parts.extend(_format_related("凭证关联", info.get("voucherRelateList")))
+    return "\n".join(parts)
+
+
+def search_items(pattern: str, max_results: int = 30) -> str:
+    """Regex search across item names, descriptions, usage, obtain sources, and types."""
+    if max_results < 1:
+        return "max_results 必须 >= 1。"
+    if max_results > 100:
+        return "max_results 必须 <= 100。"
+
+    try:
+        regex = re.compile(pattern, re.IGNORECASE)
+    except re.error as exc:
+        return f"正则表达式无效：{exc}"
+
+    try:
+        entries = _visible_items()
+    except (FileNotFoundError, RuntimeError, TypeError) as exc:
+        return _missing_data_message() + f"（{exc}）"
+
+    results: list[tuple[str, dict[str, Any]]] = []
+    for item_id, info in sorted(entries, key=lambda kv: (kv[1].get("sortId", 999999), kv[0])):
+        search_text = " ".join(
+            str(info.get(field) or "")
+            for field in ("name", "description", "usage", "obtainApproach", "classifyType", "itemType")
+        )
+        search_text += f" {item_id}"
+        if regex.search(search_text):
+            results.append((item_id, info))
+            if len(results) >= max_results:
+                break
+
+    if not results:
+        return f"未找到匹配 '{pattern}' 的物品。"
+
+    lines = [f"# 搜索结果：{pattern}（共 {len(results)} 个）"]
+    for item_id, info in results:
+        item_name = info.get("name") or "（无名）"
+        classify = _classify_label(str(info.get("classifyType") or ""))
+        item_type = info.get("itemType") or "-"
+        rarity = _rarity_label(str(info.get("rarity") or ""))
+        usage = _short_text(str(info.get("usage") or info.get("description") or ""), 120)
+        lines.append(f"\n## {item_name} [{classify}/{item_type}] {rarity}（id: {item_id}）")
+        if usage:
+            lines.append(f"- **用途**：{usage}")
+        obtain = info.get("obtainApproach")
+        if obtain:
+            lines.append(f"- **获取方式**：{obtain}")
+    return "\n".join(lines)

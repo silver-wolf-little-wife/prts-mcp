@@ -47,15 +47,15 @@ def _has_enemy_data() -> bool:
 
 def _database_store() -> DirectoryStore:
     """Return a store rooted at levels/enemydata/ for enemy_database.json."""
-    ep = _get_config().effective_excel_path
-    assert ep is not None
-    db_root = ep.parent / "levels" / "enemydata"
+    lp = _get_config().effective_levels_path
+    assert lp is not None
+    db_root = lp / "zh_CN" / "gamedata" / "levels" / "enemydata"
     return DirectoryStore(db_root)
 
 
 def _has_database() -> bool:
     cfg = _get_config()
-    if cfg.effective_excel_path is None:
+    if cfg.effective_levels_path is None:
         return False
     return _database_store().exists(_DATABASE_FILE)
 

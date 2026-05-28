@@ -6,7 +6,7 @@ stdin/stdout with JSON-RPC messages.  Tests that can run without
 network or full data:
 
   1. MCP initialize handshake
-  2. tools/list — all 21 tools registered
+  2. tools/list — all tools registered
   3. Operator tools (bundled fixture data)
   4. Graceful errors for unavailable data
 """
@@ -143,7 +143,9 @@ EXPECTED_TOOLS = {
     "get_prts_categories", "get_prts_links", "get_prts_template",
     "get_operator_archives", "get_operator_voicelines", "get_operator_basic_info",
     "list_enemies", "get_enemy_info", "search_enemies",
+    "get_stage_enemies", "get_enemy_appearances",
     "list_stages", "get_stage_info", "search_stages",
+    "list_items", "get_item_info", "search_items",
     "list_story_events", "list_stories", "read_story", "read_activity",
     "list_search_scopes", "search_data", "search_stories",
     "get_event_summary", "get_story_summary",
@@ -177,7 +179,7 @@ def test_tools_list(server: subprocess.Popen) -> None:
     tools = resp["result"]["tools"]
     names = {t["name"] for t in tools}
 
-    assert len(names) == 24, f"Expected 24 tools, got {len(names)}: {sorted(names)}"
+    assert len(names) == 29, f"Expected 29 tools, got {len(names)}: {sorted(names)}"
     for name in EXPECTED_TOOLS:
         assert name in names, f"Missing tool: {name}"
 

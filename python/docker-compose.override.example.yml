@@ -17,10 +17,13 @@ services:
       #
       #   volumes:
       #     - prts-mcp-data:/data/gamedata
+      #     - prts-mcp-levels:/data/gamedata-levels
       #     - prts-mcp-storyjson:/data/storyjson
       #
       # Alternatively, bind-mount your own ArknightsGameData repo root (read-only).
       # The server expects zh_CN/gamedata/excel/*.json under the mounted path.
+      # If that repo root also contains zh_CN/gamedata/levels, stage/enemy fusion
+      # will use it directly; otherwise mount/provision /data/gamedata-levels too.
       # When using a custom path, also set GAMEDATA_PATH above.
       #
       # Linux/macOS: - /absolute/path/to/ArknightsGameData:/data/custom:ro

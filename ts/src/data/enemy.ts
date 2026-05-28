@@ -4,7 +4,6 @@
  * Mirrors python/src/prts_mcp/data/enemy.py.
  */
 
-import { dirname } from "node:path";
 import { loadConfig } from "../config.js";
 import { DirectoryStore } from "./stores.js";
 
@@ -148,9 +147,9 @@ function mValue<T>(obj: unknown, defaultValue?: T): T | undefined {
 function getDbIndex(): Record<string, EnemyDbEntry> {
   if (_dbIndex === null) {
     const cfg = loadConfig();
-    const ep = cfg.effectiveExcelPath;
-    if (!ep) { _dbIndex = {}; return _dbIndex; }
-    const dbRoot = join(dirname(ep), "levels", "enemydata");
+    const lp = cfg.effectiveLevelsPath;
+    if (!lp) { _dbIndex = {}; return _dbIndex; }
+    const dbRoot = join(lp, "zh_CN", "gamedata", "levels", "enemydata");
     // path handling
     const store = new DirectoryStore(dbRoot);
     if (!store.exists(DATABASE_FILE)) { _dbIndex = {}; return _dbIndex; }

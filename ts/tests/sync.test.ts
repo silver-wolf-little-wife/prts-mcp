@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { syncRelease, type ReleaseSpec } from "../src/data/sync.ts";
+import AdmZip from "adm-zip";
+import { syncRelease, syncReleaseArchive, type ReleaseArchiveSpec, type ReleaseSpec } from "../src/data/sync.ts";
 
 function tempSpec(): ReleaseSpec {
   const root = mkdtempSync(join(tmpdir(), "prts-sync-test-"));
@@ -13,6 +14,27 @@ function tempSpec(): ReleaseSpec {
     assetName: "zh_CN.zip",
     localZip: join(root, "storyjson", "zh_CN.zip"),
   };
+}
+
+function tempArchiveSpec(assetName = "zh_CN-levels.zip"): ReleaseArchiveSpec {
+  const root = mkdtempSync(join(tmpdir(), "prts-sync-archive-test-"));
+  return {
+    owner: "3aKHP",
+    repo: "ArknightsGameData",
+    assetName,
+    localZip: join(root, "archives", assetName),
+    localRoot: join(root, "gamedata-levels"),
+    requiredFiles: ["zh_CN/gamedata/levels/enemydata/enemy_database.json"],
+  };
+}
+
+function writeZip(path: string, entries: Record<string, string>): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const zip = new AdmZip();
+  for (const [entryName, content] of Object.entries(entries)) {
+    zip.addFile(entryName, Buffer.from(content, "utf-8"));
+  }
+  zip.writeZip(path);
 }
 
 function withFetchMock(
@@ -135,5 +157,37 @@ test("syncRelease returns no_data when network fails and no zip exists", async (
     assert.equal(result.status, "no_data");
     assert.equal(result.commitSha, null);
     assert.equal(result.error, "Network unavailable and no cached zip");
+  });
+});
+
+test("syncReleaseArchive extracts updated archive", async () => {
+  const spec = tempArchiveSpec();
+  writeZip(spec.localZip, {
+    "zh_CN/gamedata/levels/enemydata/enemy_database.json": "{\"enemies\":[]}",
+  });
+
+  await withFetchMock((async () => {
+    throw new Error("network down");
+  }) as typeof fetch, async () => {
+    const result = await syncReleaseArchive(spec);
+
+    assert.equal(result.status, "offline_fallback");
+    assert.equal(result.error, "Network unavailable");
+  });
+});
+
+test("syncReleaseArchive returns no_data when zip misses required entries", async () => {
+  const spec = tempArchiveSpec();
+  writeZip(spec.localZip, {
+    "zh_CN/gamedata/levels/obt/main/level_main_00-01.json": "{}",
+  });
+
+  await withFetchMock((async () => {
+    throw new Error("network down");
+  }) as typeof fetch, async () => {
+    const result = await syncReleaseArchive(spec);
+
+    assert.equal(result.status, "no_data");
+    assert.match(result.error ?? "", /enemy_database\.json/);
   });
 });

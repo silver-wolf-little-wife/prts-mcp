@@ -6,8 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Item/material data domain.** Three new tools — `list_items`,
+  `get_item_info`, and `search_items` — read `item_table.json` to expose
+  material/item lists, details, obtain methods, stage drops, production, and
+  shop/voucher links.
+- **Stage/enemy cross-source fusion.** Added `get_stage_enemies(stage_id)` and
+  `get_enemy_appearances(name, limit, offset)` backed by `zh_CN-levels.zip`.
+  `get_enemy_info(name)` now accepts optional `stage_id` for stage-specific
+  enemy levels and overwritten combat stats while preserving the default
+  handbook behavior.
+- Tool surface expanded from 24 to 29. `list_search_scopes` now includes the
+  items domain.
+- Runtime data sync now handles three datasets: `zh_CN-excel.zip`,
+  `zh_CN-levels.zip`, and story `zh_CN.zip`. Docker images prewarm
+  `data/gamedata-levels` alongside existing bundled fallback data.
+
+### Changed
+
+- Stage drop formatting now resolves item IDs through `item_table.json` when
+  available, e.g. `招聘许可（7001）`.
+- `fetch_gamedata.py` now prewarms both the excel and levels Release archives;
+  `check_package_data.py` verifies bundled level data before packaging.
+
 ### Fixed
 
+- **Release archive validation.** Archive sync validates required zip entries
+  before extraction and rechecks required files after extraction, so a partial
+  or corrupt `zh_CN-levels.zip` cannot be logged as healthy data.
+- **Enemy appearance lookup memory profile.** `get_enemy_appearances` now scans
+  for the requested enemy instead of permanently caching an all-enemy
+  appearance index on first use.
 - **ZipStore lifecycle hardening.** `ZipStore` now supports explicit
   `close()` and context-manager use. Zip-path story helpers close their
   transient stores after each call, avoiding lingering `ZipFile` handles in

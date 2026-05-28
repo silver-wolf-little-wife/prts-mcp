@@ -1,0 +1,353 @@
+from __future__ import annotations
+
+from collections import Counter
+from functools import lru_cache
+from typing import Any
+
+from prts_mcp.config import Config
+from prts_mcp.data.stores import DirectoryStore
+
+
+_DATABASE_FILE = "enemydata/enemy_database.json"
+
+
+def _get_config() -> Config:
+    return Config.load()
+
+
+def _excel_store() -> DirectoryStore:
+    ep = _get_config().effective_excel_path
+    if ep is None:
+        raise RuntimeError("effective_excel_path is None — GAMEDATA_PATH may be unset")
+    return DirectoryStore(ep)
+
+
+def _levels_store() -> DirectoryStore:
+    lp = _get_config().effective_levels_path
+    if lp is None:
+        raise RuntimeError("effective_levels_path is None — levels data may be unsynced")
+    return DirectoryStore(lp / "zh_CN" / "gamedata" / "levels")
+
+
+def _missing_levels_message() -> str:
+    config = _get_config()
+    return (
+        "关卡战斗数据暂不可用。请等待服务器自动从 GitHub Release 同步 "
+        "zh_CN-levels.zip 完成后重试。"
+        f"（当前同步目标路径：{config.levels_path}）"
+    )
+
+
+def clear_stage_enemy_caches() -> None:
+    _load_stage_table.cache_clear()
+    _load_enemy_handbook.cache_clear()
+    _load_enemy_database.cache_clear()
+    _build_enemy_name_to_id.cache_clear()
+
+
+@lru_cache(maxsize=1)
+def _load_stage_table() -> dict[str, dict[str, Any]]:
+    raw = _excel_store().read_json("stage_table.json")
+    stages = raw.get("stages") if isinstance(raw, dict) else None
+    if not isinstance(stages, dict):
+        raise TypeError("stage_table.json missing 'stages' dict")
+    return stages
+
+
+@lru_cache(maxsize=1)
+def _load_enemy_handbook() -> dict[str, dict[str, Any]]:
+    raw = _excel_store().read_json("enemy_handbook_table.json")
+    data = raw.get("enemyData") if isinstance(raw, dict) else None
+    if not isinstance(data, dict):
+        raise TypeError("enemy_handbook_table.json missing 'enemyData' dict")
+    return data
+
+
+@lru_cache(maxsize=1)
+def _load_enemy_database() -> dict[str, dict[int, dict[str, Any]]]:
+    raw = _levels_store().read_json(_DATABASE_FILE)
+    index: dict[str, dict[int, dict[str, Any]]] = {}
+    for row in raw.get("enemies", []):
+        key = row.get("Key")
+        values = row.get("Value") or []
+        if not key:
+            continue
+        level_map: dict[int, dict[str, Any]] = {}
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            try:
+                level = int(value.get("level", 0))
+            except (TypeError, ValueError):
+                level = 0
+            enemy_data = value.get("enemyData")
+            if isinstance(enemy_data, dict):
+                level_map[level] = enemy_data
+        index[str(key)] = level_map
+    return index
+
+
+@lru_cache(maxsize=1)
+def _build_enemy_name_to_id() -> dict[str, str]:
+    return {
+        str(info["name"]): enemy_id
+        for enemy_id, info in _load_enemy_handbook().items()
+        if info.get("name")
+    }
+
+
+def _level_path(level_id: str) -> str:
+    return level_id.lower().replace("\\", "/") + ".json"
+
+
+def _load_level_json(stage: dict[str, Any]) -> dict[str, Any] | str:
+    level_id = stage.get("levelId")
+    if not level_id:
+        return "该关卡没有 levelId，可能是非战斗/特殊关卡。"
+    path = _level_path(str(level_id))
+    store = _levels_store()
+    if not store.exists(path):
+        return f"未找到关卡战斗文件：{path}。"
+    raw = store.read_json(path)
+    if not isinstance(raw, dict):
+        return f"关卡战斗文件格式异常：{path}。"
+    return raw
+
+
+def _m_value(obj: Any, default: Any = None) -> Any:
+    if isinstance(obj, dict) and "m_value" in obj:
+        return obj["m_value"]
+    return obj if obj is not None else default
+
+
+def _merge_defined(base: Any, override: Any) -> Any:
+    """Merge enemyData dictionaries, applying only m_defined=true overrides."""
+    if not isinstance(override, dict):
+        return base
+    if "m_defined" in override and "m_value" in override:
+        return override["m_value"] if override.get("m_defined") else base
+    if isinstance(base, dict):
+        merged = dict(base)
+    else:
+        merged = {}
+    for key, value in override.items():
+        if isinstance(value, dict) and value.get("m_defined") is False:
+            continue
+        merged[key] = _merge_defined(merged.get(key), value)
+    return merged
+
+
+def _spawn_counts(level: dict[str, Any]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for wave in level.get("waves", []) or []:
+        for fragment in wave.get("fragments", []) or []:
+            for action in fragment.get("actions", []) or []:
+                if action.get("actionType") not in ("SPAWN", 0):
+                    continue
+                key = action.get("key")
+                if key:
+                    try:
+                        count = int(action.get("count", 1))
+                    except (TypeError, ValueError):
+                        count = 1
+                    counts[str(key)] += max(count, 1)
+    return counts
+
+
+def _enemy_refs(level: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    refs: dict[str, dict[str, Any]] = {}
+    for ref in level.get("enemyDbRefs", []) or []:
+        key = ref.get("id")
+        if key:
+            refs[str(key)] = ref
+    return refs
+
+
+def _handbook_name(enemy_id: str) -> str:
+    info = _load_enemy_handbook().get(enemy_id) or {}
+    return str(info.get("name") or enemy_id)
+
+
+def _overwritten_enemy_name(overwritten: Any) -> str | None:
+    if not isinstance(overwritten, dict):
+        return None
+    name = overwritten.get("name") or overwritten.get("prefabKey")
+    return str(_m_value(name)) if name else None
+
+
+def _stage_label(stage: dict[str, Any], stage_id: str) -> str:
+    name = stage.get("name") or "（无名）"
+    code = stage.get("code") or stage_id
+    return f"{name} {code}（{stage_id}）"
+
+
+def _stage_specific_enemy_data(enemy_id: str, level: int, overwritten: Any = None) -> dict[str, Any] | None:
+    db_entry = _load_enemy_database().get(enemy_id, {})
+    base = db_entry.get(level) or db_entry.get(0)
+    if base is None:
+        return overwritten if isinstance(overwritten, dict) else None
+    merged = _merge_defined(base, overwritten)
+    return merged if isinstance(merged, dict) else base
+
+
+def _format_stats(enemy_data: dict[str, Any] | None) -> str:
+    if not enemy_data:
+        return "战斗属性：无数据库记录"
+    attrs = enemy_data.get("attributes") or {}
+    hp = _m_value(attrs.get("maxHp"), 0)
+    atk = _m_value(attrs.get("atk"), 0)
+    defense = _m_value(attrs.get("def"), 0)
+    res = _m_value(attrs.get("magicResistance"), 0)
+    speed = _m_value(attrs.get("moveSpeed"), 0)
+    atk_time = _m_value(attrs.get("baseAttackTime"), 0)
+    parts = [
+        f"HP {hp:,}" if isinstance(hp, int) else f"HP {hp}",
+        f"ATK {atk}",
+        f"DEF {defense}",
+        f"RES {res}",
+    ]
+    if speed:
+        parts.append(f"移速 {speed}")
+    if atk_time:
+        parts.append(f"攻击间隔 {atk_time}s")
+    return "；".join(parts)
+
+
+def get_stage_enemies(stage_id: str) -> str:
+    """Return enemies actually spawned by a stage, using stage-specific levels."""
+    if not _get_config().has_levels_data:
+        return _missing_levels_message()
+    try:
+        stages = _load_stage_table()
+        stage = stages.get(stage_id)
+        if not stage:
+            return f"未找到关卡：{stage_id!r}。"
+        level = _load_level_json(stage)
+        if isinstance(level, str):
+            return level
+        counts = _spawn_counts(level)
+        refs = _enemy_refs(level)
+    except Exception as exc:  # noqa: BLE001
+        return f"读取关卡敌人失败：{exc}"
+
+    if not counts:
+        return f"关卡 {stage_id!r} 未解析到实际出怪。"
+
+    lines = [f"# {_stage_label(stage, stage_id)} — 敌人列表"]
+    for enemy_id, count in counts.most_common():
+        ref = refs.get(enemy_id, {})
+        try:
+            level_no = int(ref.get("level", 0))
+        except (TypeError, ValueError):
+            level_no = 0
+        overwritten = ref.get("overwrittenData")
+        data = _stage_specific_enemy_data(enemy_id, level_no, overwritten)
+        name = _overwritten_enemy_name(overwritten) or _handbook_name(enemy_id)
+        lines.append(f"\n## {name}（{enemy_id}）")
+        lines.append(f"- **出场数量**：{count}")
+        lines.append(f"- **敌人等级**：{level_no}")
+        if overwritten:
+            lines.append("- **关卡覆盖**：是")
+        lines.append(f"- **战斗属性**：{_format_stats(data)}")
+    return "\n".join(lines)
+
+
+def _find_enemy_appearances(enemy_id: str) -> list[tuple[str, int]]:
+    appearances: list[tuple[str, int]] = []
+    stages = _load_stage_table()
+    store = _levels_store()
+    for stage_id, stage in stages.items():
+        level_id = stage.get("levelId")
+        if not level_id:
+            continue
+        path = _level_path(str(level_id))
+        if not store.exists(path):
+            continue
+        level = store.read_json(path)
+        if not isinstance(level, dict):
+            continue
+        count = _spawn_counts(level).get(enemy_id)
+        if count:
+            appearances.append((stage_id, count))
+    return appearances
+
+
+def get_enemy_appearances(name: str, limit: int = 50, offset: int = 0) -> str:
+    """Return stages where an enemy actually spawns."""
+    if limit < 1:
+        return "limit 必须 >= 1。"
+    if limit > 200:
+        return "limit 必须 <= 200。"
+    if offset < 0:
+        return "offset 必须 >= 0。"
+    if not _get_config().has_levels_data:
+        return _missing_levels_message()
+
+    try:
+        enemy_id = _build_enemy_name_to_id().get(name) or (name if name in _load_enemy_handbook() else None)
+        if enemy_id is None:
+            return f"未找到敌人：{name!r}。"
+        appearances = _find_enemy_appearances(enemy_id)
+        stages = _load_stage_table()
+    except Exception as exc:  # noqa: BLE001
+        return f"读取敌人出场关卡失败：{exc}"
+
+    total = len(appearances)
+    page = appearances[offset : offset + limit]
+    enemy_name = _handbook_name(enemy_id)
+    if not page:
+        if total == 0:
+            return f"未找到 {enemy_name}（{enemy_id}）的实际出场关卡。"
+        return f"offset {offset} 超出范围（共 {total} 条）。"
+
+    lines = [f"# {enemy_name}（{enemy_id}）— 出场关卡（共 {total} 个）"]
+    for stage_id, count in page:
+        stage = stages.get(stage_id, {})
+        code = stage.get("code") or stage_id
+        stage_name = stage.get("name") or "（无名）"
+        lines.append(f"- **{stage_name}** {code}（{stage_id}）：{count} 个")
+    start = offset + 1
+    end = min(offset + limit, total)
+    lines.append(f"\n（显示第 {start}–{end} 条，共 {total} 条。使用 offset={offset + limit} 查看下一页）")
+    return "\n".join(lines)
+
+
+def get_enemy_stage_info(name: str, stage_id: str) -> str:
+    """Return a single enemy's stage-specific stats for a stage."""
+    if not _get_config().has_levels_data:
+        return _missing_levels_message()
+    try:
+        enemy_id = _build_enemy_name_to_id().get(name) or (name if name in _load_enemy_handbook() else None)
+        if enemy_id is None:
+            return f"未找到敌人：{name!r}。"
+        stages = _load_stage_table()
+        stage = stages.get(stage_id)
+        if not stage:
+            return f"未找到关卡：{stage_id!r}。"
+        level = _load_level_json(stage)
+        if isinstance(level, str):
+            return level
+        counts = _spawn_counts(level)
+        refs = _enemy_refs(level)
+        ref = refs.get(enemy_id)
+    except Exception as exc:  # noqa: BLE001
+        return f"读取关卡敌人失败：{exc}"
+
+    if enemy_id not in counts:
+        return f"{_handbook_name(enemy_id)}（{enemy_id}）未在关卡 {stage_id!r} 实际出场。"
+    if ref is None:
+        return f"关卡 {stage_id!r} 缺少 {enemy_id} 的 enemyDbRefs。"
+
+    try:
+        level_no = int(ref.get("level", 0))
+    except (TypeError, ValueError):
+        level_no = 0
+    data = _stage_specific_enemy_data(enemy_id, level_no, ref.get("overwrittenData"))
+    enemy_name = _overwritten_enemy_name(ref.get("overwrittenData")) or _handbook_name(enemy_id)
+    lines = [f"# {enemy_name}（{enemy_id}）@ {_stage_label(stage, stage_id)}"]
+    lines.append(f"- **出场数量**：{counts[enemy_id]}")
+    lines.append(f"- **敌人等级**：{level_no}")
+    if ref.get("overwrittenData"):
+        lines.append("- **关卡覆盖**：是")
+    lines.append(f"- **战斗属性**：{_format_stats(data)}")
+    return "\n".join(lines)

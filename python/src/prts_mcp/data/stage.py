@@ -4,6 +4,7 @@ import re as _re
 from functools import lru_cache as _lru_cache
 
 from prts_mcp.config import Config as _Config
+from prts_mcp.data.item import get_item_name_by_id as _get_item_name_by_id
 from prts_mcp.data.stores import DirectoryStore as _DirectoryStore
 
 # ---------------------------------------------------------------------------
@@ -98,9 +99,19 @@ def _format_drops(drop_info: dict | None) -> str:
         return "（无）"
     parts: list[str] = []
     for d in display:
-        name = d.get("type") or d.get("dropType") or "?"
+        item_id = str(d.get("id") or "")
+        item_name = None
+        if item_id:
+            item_name = _get_item_name_by_id(item_id)
+        name = item_name or d.get("type") or d.get("dropType") or item_id or "?"
+        if item_id and item_name:
+            name = f"{name}（{item_id}）"
+        elif item_id and name != item_id:
+            name = f"{name}（{item_id}）"
         count = d.get("count", 1)
-        parts.append(f"- {name} ×{count}")
+        drop_type = d.get("dropType")
+        suffix = f" [{drop_type}]" if drop_type else ""
+        parts.append(f"- {name} ×{count}{suffix}")
     return "\n".join(parts) if parts else "（无）"
 
 

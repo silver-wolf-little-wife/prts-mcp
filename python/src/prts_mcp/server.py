@@ -7,7 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
-from typing import Annotated, Callable
+from typing import Annotated, Callable, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
@@ -35,6 +35,16 @@ from prts_mcp.data.stage import (
     get_stage_info as _get_stage_info,
     search_stages as _search_stages,
 )
+from prts_mcp.data.item import (
+    list_items as _list_items,
+    get_item_info as _get_item_info,
+    search_items as _search_items,
+)
+from prts_mcp.data.stage_enemy import (
+    get_stage_enemies as _get_stage_enemies,
+    get_enemy_appearances as _get_enemy_appearances,
+    get_enemy_stage_info as _get_enemy_stage_info,
+)
 from prts_mcp.data.search import search_operator_data as _search_operator_data
 from prts_mcp.data.story import (
     list_story_events as _list_story_events,
@@ -55,6 +65,11 @@ _logger = logging.getLogger("prts_mcp.server")
 
 mcp = FastMCP("PRTS_Wiki_Assistant")
 _SYNC_RETRY_DELAYS_SECONDS = (30, 120, 600)
+# Startup sync labels are fixed domains; keep their locks for process lifetime
+# so overlapping initial/retry attempts share the same mutex.
+_SYNC_LOCKS: dict[str, threading.Lock] = {}
+_SYNC_LOCKS_GUARD = threading.Lock()
+_SyncRunResult = Literal["retry", "done", "skipped"]
 
 
 @mcp.tool()
@@ -256,11 +271,15 @@ def list_enemies(
 @mcp.tool()
 def get_enemy_info(
     name: Annotated[str, Field(description="敌人的游戏内中文名，如「源石虫」、「霜星」。")],
+    stage_id: Annotated[str | None, Field(default=None, description="可选关卡 ID；设置后返回该关卡内的敌人等级/覆盖后的战斗属性。")] = None,
 ) -> str:
     """获取指定敌人的详细图鉴资料。
 
-    返回该敌人的威胁等级、描述、攻击方式、伤害类型和特殊能力等信息。
+    默认返回该敌人的威胁等级、描述、攻击方式、伤害类型和特殊能力等图鉴信息。
+    若提供 stage_id，则返回该敌人在指定关卡内的等级与关卡覆盖后的战斗属性。
     """
+    if stage_id:
+        return _get_enemy_stage_info(name, stage_id)
     return _get_enemy_info(name)
 
 
@@ -275,6 +294,32 @@ def search_enemies(
     阵营或关键词相关的敌人信息。
     """
     return _search_enemies(pattern, max_results=max_results)
+
+
+@mcp.tool()
+def get_stage_enemies(
+    stage_id: Annotated[str, Field(description="关卡 ID，如 'main_00-01'（可从 list_stages 获取）。")],
+) -> str:
+    """获取指定关卡实际出场的敌人列表。
+
+    基于关卡 level JSON 的 SPAWN 动作统计实际出怪，并合并 enemy_database 中
+    对应该关卡敌人等级的战斗属性。
+    """
+    return _get_stage_enemies(stage_id)
+
+
+@mcp.tool()
+def get_enemy_appearances(
+    name: Annotated[str, Field(description="敌人的游戏内中文名或 enemyId，如「源石虫」或 enemy_1007_slime。")],
+    limit: Annotated[int, Field(default=50, description="返回数量上限，默认 50。")] = 50,
+    offset: Annotated[int, Field(default=0, description="分页偏移量，默认 0。")] = 0,
+) -> str:
+    """反向查询指定敌人实际出现在哪些关卡。
+
+    只统计关卡 level JSON 中 SPAWN 动作真正刷出的敌人，不把 enemyDbRefs 中
+    未实际出场的引用计入结果。
+    """
+    return _get_enemy_appearances(name, limit=limit, offset=offset)
 
 
 @mcp.tool()
@@ -313,6 +358,43 @@ def search_stages(
     搜索范围覆盖关卡名称、编号、描述。返回匹配关卡的基本信息块。
     """
     return _search_stages(pattern, max_results=max_results)
+
+
+@mcp.tool()
+def list_items(
+    category: Annotated[str | None, Field(default=None, description="按物品分类过滤，如 MATERIAL（材料）、NORMAL（普通）、CONSUME（消耗品）。不填则返回全部可见物品。")] = None,
+    limit: Annotated[int, Field(default=50, description="返回数量上限，默认 50。")] = 50,
+    offset: Annotated[int, Field(default=0, description="分页偏移量，默认 0。")] = 0,
+) -> str:
+    """列出物品/材料列表，支持按分类过滤和分页。
+
+    返回物品名称、分类、类型、稀有度、ID 和简短用途。适合查找材料、
+    货币、凭证等 item_table 物品。
+    """
+    return _list_items(category=category, limit=limit, offset=offset)
+
+
+@mcp.tool()
+def get_item_info(
+    name: Annotated[str, Field(description="物品中文名或 itemId，如「固源岩」、「招聘许可」或 \"30012\"。")],
+) -> str:
+    """获取指定物品/材料的详细信息。
+
+    返回物品的描述、用途、获取方式、掉落关卡、基建产出和商店/凭证关联等。
+    """
+    return _get_item_info(name)
+
+
+@mcp.tool()
+def search_items(
+    pattern: Annotated[str, Field(description="正则表达式搜索模式，如「源岩|装置」。")],
+    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+) -> str:
+    """在物品/材料数据中进行全文正则搜索。
+
+    搜索范围包含物品名称、描述、用途、获取方式和类型。
+    """
+    return _search_items(pattern, max_results=max_results)
 
 
 @mcp.tool()
@@ -561,7 +643,9 @@ def list_search_scopes() -> str:
         "- stages：关卡数据（名称、编号、描述、类型、掉落、解锁条件）。\n"
         "  使用 list_stages / get_stage_info / search_stages 查询。\n"
         "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n"
-        "  使用 list_enemies / get_enemy_info / search_enemies 查询。"
+        "  使用 list_enemies / get_enemy_info / search_enemies 查询。\n"
+        "- items：物品/材料（名称、描述、用途、掉落、商店关联）。\n"
+        "  使用 list_items / get_item_info / search_items 查询。"
     )
 
 
@@ -633,6 +717,18 @@ def _run_initial_sync(label: str, sync_func: Callable[[], bool]) -> bool:
         return True
 
 
+def _single_flight_sync(label: str, sync_func: Callable[[], bool]) -> _SyncRunResult:
+    with _SYNC_LOCKS_GUARD:
+        lock = _SYNC_LOCKS.setdefault(label, threading.Lock())
+    if not lock.acquire(blocking=False):
+        _logger.info("%s sync is already running; skipping overlapping attempt.", label)
+        return "skipped"
+    try:
+        return "retry" if sync_func() else "done"
+    finally:
+        lock.release()
+
+
 def _schedule_sync_retry(label: str, sync_func: Callable[[], bool], attempt: int = 0) -> None:
     delay = _SYNC_RETRY_DELAYS_SECONDS[attempt] if attempt < len(_SYNC_RETRY_DELAYS_SECONDS) else None
     if delay is None:
@@ -645,11 +741,13 @@ def _schedule_sync_retry(label: str, sync_func: Callable[[], bool], attempt: int
 
     def _retry() -> None:
         try:
-            needs_retry = sync_func()
+            result = _single_flight_sync(label, sync_func)
         except Exception as exc:  # noqa: BLE001
             _logger.exception("%s retry sync threw unexpectedly: %s", label, exc)
-            needs_retry = True
-        if needs_retry:
+            result = "retry"
+        if result == "skipped":
+            _schedule_sync_retry(label, sync_func, attempt)
+        elif result == "retry":
             _schedule_sync_retry(label, sync_func, attempt + 1)
 
     timer = threading.Timer(delay, _retry)
@@ -666,7 +764,7 @@ def _run_startup_sync() -> None:
     overwrite it.
     """
     from prts_mcp.config import Config, _DEFAULT_GAMEDATA_PATH
-    from prts_mcp.data.datasets import GAMEDATA_EXCEL, STORY_ZH_CN
+    from prts_mcp.data.datasets import GAMEDATA_EXCEL, GAMEDATA_LEVELS, STORY_ZH_CN
     from prts_mcp.data.sync import sync_release, sync_release_archive
 
     cfg = Config.load()
@@ -687,16 +785,46 @@ def _run_startup_sync() -> None:
             if r.status == "updated":
                 from prts_mcp.data.operator import clear_operator_caches
                 from prts_mcp.data.enemy import clear_enemy_caches
+                from prts_mcp.data.item import clear_item_caches
+                from prts_mcp.data.stage_enemy import clear_stage_enemy_caches
 
                 clear_operator_caches()
                 clear_enemy_caches()
+                clear_item_caches()
+                clear_stage_enemy_caches()
                 from prts_mcp.data.stage import clear_stage_caches as _clear_stages
                 _clear_stages()
             return _sync_needs_retry(r.status)
 
-        needs_retry = _run_initial_sync("Gamedata", _sync_gamedata)
+        needs_retry = _run_initial_sync(
+            "Gamedata",
+            lambda: _single_flight_sync("Gamedata", _sync_gamedata) != "done",
+        )
         if needs_retry:
             _schedule_sync_retry("Gamedata", _sync_gamedata)
+
+        levels_spec = GAMEDATA_LEVELS.archive_spec(
+            local_zip=cfg.levels_path / "archives" / "zh_CN-levels.zip",
+            local_root=cfg.levels_path,
+        )
+
+        def _sync_levels() -> bool:
+            r = sync_release_archive(levels_spec)
+            _log_sync_result(r)
+            if r.status == "updated":
+                from prts_mcp.data.enemy import clear_enemy_caches
+                from prts_mcp.data.stage_enemy import clear_stage_enemy_caches
+
+                clear_enemy_caches()
+                clear_stage_enemy_caches()
+            return _sync_needs_retry(r.status)
+
+        needs_retry = _run_initial_sync(
+            "Gamedata levels",
+            lambda: _single_flight_sync("Gamedata levels", _sync_levels) != "done",
+        )
+        if needs_retry:
+            _schedule_sync_retry("Gamedata levels", _sync_levels)
 
     # Always try to sync storyjson from GitHub Release (unless user supplied their own zip)
     if "STORYJSON_PATH" not in os.environ:
@@ -707,7 +835,10 @@ def _run_startup_sync() -> None:
             _log_sync_result(r)
             return _sync_needs_retry(r.status)
 
-        needs_retry = _run_initial_sync("Storyjson", _sync_storyjson)
+        needs_retry = _run_initial_sync(
+            "Storyjson",
+            lambda: _single_flight_sync("Storyjson", _sync_storyjson) != "done",
+        )
         if needs_retry:
             _schedule_sync_retry("Storyjson", _sync_storyjson)
 

@@ -8,6 +8,10 @@ export const STORYJSON_REQUIRED_FILES = [
 ] as const;
 const STORYJSON_REVIEW_TABLE = "zh_CN/gamedata/excel/story_review_table.json";
 
+export const LEVELS_REQUIRED_FILES = [
+  "zh_CN/gamedata/levels/enemydata/enemy_database.json",
+] as const;
+
 export interface ReleaseDatasetSpec {
   datasetId: string;
   owner: string;
@@ -32,6 +36,14 @@ export const STORY_ZH_CN: ReleaseDatasetSpec = {
   assetName: "zh_CN.zip",
   requiredFiles: STORYJSON_REQUIRED_FILES,
   validateZip: validateStoryjsonZip,
+};
+
+export const GAMEDATA_LEVELS: ReleaseDatasetSpec = {
+  datasetId: "gamedata.levels",
+  owner: "3aKHP",
+  repo: "ArknightsGameData",
+  assetName: "zh_CN-levels.zip",
+  requiredFiles: LEVELS_REQUIRED_FILES,
 };
 
 export function releaseSpecForDataset(

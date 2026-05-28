@@ -34,7 +34,7 @@ ENV PRTS_MCP_ROOT=/app
 ENV PORT=3000
 
 # Create the volume mount-point as an empty directory.
-RUN mkdir -p /data/gamedata /data/storyjson
+RUN mkdir -p /data/gamedata /data/gamedata-levels /data/storyjson
 
 EXPOSE 3000
 

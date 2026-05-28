@@ -29,8 +29,10 @@ GAMEDATA_FILES: tuple[str, ...] = (
     "zh_CN/gamedata/excel/handbook_info_table.json",
     "zh_CN/gamedata/excel/charword_table.json",
     "zh_CN/gamedata/excel/story_review_table.json",
+    "zh_CN/gamedata/excel/enemy_handbook_table.json",
     "zh_CN/gamedata/excel/stage_table.json",
     "zh_CN/gamedata/excel/zone_table.json",
+    "zh_CN/gamedata/excel/item_table.json",
 )
 
 _GITHUB_COMMITS_URL = "https://api.github.com/repos/{owner}/{repo}/commits/{branch}"
@@ -499,6 +501,19 @@ def _archive_files_present(spec: ReleaseArchiveSpec) -> bool:
     return all((spec.local_root / f).is_file() for f in spec.required_files)
 
 
+def _archive_missing_files(spec: ReleaseArchiveSpec) -> list[str]:
+    return [f for f in spec.required_files if not (spec.local_root / f).is_file()]
+
+
+def _validate_archive_zip(zip_path: Path, required_files: tuple[str, ...]) -> list[str]:
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            names = set(zf.namelist())
+            return [path for path in required_files if path not in names]
+    except Exception as exc:  # noqa: BLE001
+        return [f"{zip_path.name} is not a valid zip: {exc}"]
+
+
 def _safe_extract_zip(zip_path: Path, local_root: Path) -> None:
     """Extract zip entries under local_root with a write-to-tmp-then-replace pattern."""
     root = local_root.resolve()
@@ -540,6 +555,7 @@ def sync_release_archive(spec: ReleaseArchiveSpec) -> SyncResult:
             repo=spec.repo,
             asset_name=spec.asset_name,
             local_zip=spec.local_zip,
+            validate_zip=lambda path: _validate_archive_zip(path, spec.required_files),
         )
     )
     dummy_spec = RepoSpec(
@@ -583,6 +599,23 @@ def sync_release_archive(spec: ReleaseArchiveSpec) -> SyncResult:
                 status="no_data",
                 commit_sha=release_result.commit_sha,
                 error=str(exc),
+            )
+
+        missing = _archive_missing_files(spec)
+        if missing:
+            error = "Archive extraction missing required files: " + "; ".join(missing[:10])
+            if _archive_files_present(spec):
+                return SyncResult(
+                    spec=dummy_spec,
+                    status="offline_fallback",
+                    commit_sha=release_result.commit_sha,
+                    error=error,
+                )
+            return SyncResult(
+                spec=dummy_spec,
+                status="no_data",
+                commit_sha=release_result.commit_sha,
+                error=error,
             )
 
     return SyncResult(
