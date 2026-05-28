@@ -6,11 +6,11 @@ _Last updated: 2026-05-28_
 
 | 实现 | 版本 | 状态 |
 |------|------|------|
-| Python | 1.5.0 | stable |
-| TypeScript | 1.5.0 | stable |
+| Python | 1.6.0 | release candidate |
+| TypeScript | 1.6.0 | release candidate |
 
+- 当前发版候选：29 个 MCP 工具（1.6.0，新增关卡敌人融合与物品/材料域）
 - 当前稳定发布：24 个 MCP 工具（1.5.0）
-- main 分支开发中：29 个 MCP 工具（1.6.0 目标，新增关卡敌人融合与物品/材料域）
 - 兼容性合约：1.x 期间既有工具名和必填参数不变；minor 版本允许新增工具和可选参数
 
 ## 仓库结构
@@ -100,7 +100,7 @@ PRTS-MCP/
 
 | 版本 | 日期 | 亮点 |
 |------|------|------|
-| 1.6.0 | planned | 关卡敌人融合 + 物品/材料域（29 工具） |
+| 1.6.0 | 2026-05-28 | 关卡敌人融合 + 物品/材料域（29 工具） |
 | 1.5.0 | 2026-05-25 | 关卡数据域：list_stages、get_stage_info、search_stages（24 工具） |
 | 1.4.2 | 2026-05-25 | 修复 Streamable HTTP session pool 400 错误 |
 | 1.4.1 | 2026-05-19 | 生产修复：ZipStore 缓存、session 泄漏、httpx 复用、审计 parity |

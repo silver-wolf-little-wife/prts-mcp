@@ -6,9 +6,9 @@ PRTS-MCP is past 1.0. The public tool surface and data architecture are under a 
 
 ## Current Release
 
-- Python: `1.5.0`
-- TypeScript: `1.5.0`
-- 24 public MCP tools, frozen in the 1.x line (CI-enforced).
+- Python: `1.6.0`
+- TypeScript: `1.6.0`
+- 29 public MCP tools, frozen in the 1.x line (CI-enforced).
 - See [migration guide](docs/migration-0.x-to-1.0.md) for the
   0.x → 1.0 transition.
 
@@ -46,6 +46,9 @@ Patch releases (1.x.y) are limited to bug fixes, documentation, and non-breaking
 Each minor version carries one main data domain. Cross-source fusion tools ship with or after the version that introduces their dependency.
 
 ### 1.6.0 — Stage Cross-Source Fusion + Item/Material Domain
+
+Shipped 2026-05-28. See the Python and TypeScript CHANGELOGs for release
+details.
 
 **Stage cross-source fusion**
 - `get_stage_enemies(stage_id)` — enemies in that stage with **stage-specific**
@@ -112,7 +115,7 @@ Three structural shifts that warrant a major bump.
 
 ### Tool surface consolidation (context budget)
 
-The 1.x tool surface keeps growing (24 tools at 1.5.0, projected 30+ by 1.8.0). For long-context flagship models this is fine; for 128K-class models, every additional tool schema eats into the prompt budget and hurts tool-selection accuracy.
+The 1.x tool surface keeps growing (29 tools at 1.6.0, projected 30+ by 1.8.0). For long-context flagship models this is fine; for 128K-class models, every additional tool schema eats into the prompt budget and hurts tool-selection accuracy.
 
 **Background**: MCP currently has no protocol-level support for deferred tool loading. Closed proposals: lazy hydration (#1978), lazyRegistration (#2376). Open drafts: tool-search query (#1821), token-bloat mitigations (#1576). Claude Code's ToolSearch is an Anthropic-API-level feature (`tool_reference` blocks), not portable to Cursor/Cline/Chatbox.
 

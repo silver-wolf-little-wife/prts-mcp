@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-05-28
+
 ### Added
 
 - **Item/material data domain.** Three new tools — `list_items`,
