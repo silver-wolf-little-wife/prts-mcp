@@ -4,7 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.6.1] - 2026-06-03
+
+### Added
+
+- **Operator memoir discovery.** New `get_operator_memoirs(operator_name)` tool
+  resolves operator Chinese name to memoir story keys via `chardict.json`,
+  enabling LLM agents to find and read operator memoir (干员密录) dialogue.
+- This new tool is treated as a one-off patch-line exception because it exposes
+  story data that already existed in the synced StoryJson archive but was not
+  discoverable through the public tool surface.
+- `list_story_events(category="memoirs")` now exposes 372 previously hidden
+  operator memoir events.
+- Operator memoir dialogue is now indexed by `search_stories`.
+
+### Changed
+
+- Search tools backed by local game/story data now reuse cached search records
+  instead of rebuilding parsed text on every call, substantially improving
+  repeated full-story and full-table regex searches.
+- Enemy search records now include `enemyTags` in searchable text.
+
+### Fixed
+
+- Story search now caps `max_results` and `context_lines` consistently to
+  prevent oversized MCP responses from long-running full-dataset searches.
+- `search_stages` and `search_items` now enforce `max_results` bounds (1–100)
+  for parity with other search tools.
+- `list_story_events` and `search_stories` no longer ignore entries with
+  `entryType: "NONE"` when those entries have valid story data (was the
+  root cause of memoirs being undiscoverable).
 
 ## [1.6.0] - 2026-05-28
 

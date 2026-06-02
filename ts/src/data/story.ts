@@ -10,7 +10,9 @@
  *   zh_CN/gamedata/story/{story_key}.json         — per-chapter dialogue JSON
  */
 
-import { JsonStore, ZipStore } from "./stores.js";
+import { DirectoryStore, JsonStore, ZipStore } from "./stores.js";
+import { statSync } from "node:fs";
+import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Zip path constants
@@ -20,6 +22,7 @@ const STORY_REVIEW_TABLE = "zh_CN/gamedata/excel/story_review_table.json";
 const STORYINFO = "zh_CN/storyinfo.json";
 const SUMMARIES = "zh_CN/summaries.json";
 const EVENT_SUMMARIES = "zh_CN/event_summaries.json";
+const CHARDICT = "zh_CN/chardict.json";
 
 function storyZipPath(storyKey: string): string {
   return `zh_CN/gamedata/story/${storyKey}.json`;
@@ -29,6 +32,7 @@ function storyZipPath(storyKey: string): string {
 const CATEGORY_MAP: Record<string, string[]> = {
   main: ["MAINLINE"],
   activities: ["ACTIVITY", "MINI_ACTIVITY"],
+  memoirs: ["NONE"],
 };
 
 // ---------------------------------------------------------------------------
@@ -36,6 +40,7 @@ const CATEGORY_MAP: Record<string, string[]> = {
 // ---------------------------------------------------------------------------
 
 const RICH_TAG_RE = /<[^>]+>/g;
+const MEMOIR_EVENT_RE = /^story_([a-z0-9_]+)_set_\d+$/;
 
 function cleanText(text: string): string {
   return text.replace(/\{@nickname\}/g, "博士").replace(RICH_TAG_RE, "").trim();
@@ -115,6 +120,55 @@ export interface ActivityResult {
   totalChapters: number;
   hasMore: boolean;
   chapters: StoryChapter[];
+}
+
+export interface MemoirChapter {
+  eventId: string;
+  storyKey: string;
+  storyCode: string;
+  storyName: string;
+}
+
+export interface OperatorMemoirResult {
+  operatorName: string;
+  internalCode: string;
+  operatorId: string;
+  totalChapters: number;
+  chapters: MemoirChapter[];
+}
+
+interface StorySearchChapter {
+  eventId: string;
+  storyCode: string;
+  lines: StoryLine[];
+}
+
+interface StorySearchRecord {
+  chapterIndex: number;
+  lineIndex: number;
+  line: StoryLine;
+}
+
+interface StorySearchIndex {
+  eventIds: Set<string>;
+  chapters: StorySearchChapter[];
+  records: StorySearchRecord[];
+}
+
+let storySearchCache:
+  | { descriptor: string; index: StorySearchIndex }
+  | null = null;
+
+interface CharDictEntry {
+  name?: string;
+  id?: string;
+}
+
+let charDictCache: { descriptor: string; data: Record<string, CharDictEntry> } | null = null;
+
+export function clearStoryCaches(): void {
+  storySearchCache = null;
+  charDictCache = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,7 +265,14 @@ export function listStoryEventsFromStore(
   const events: EventInfo[] = [];
   for (const [eventId, entry] of Object.entries(table)) {
     const entryType = entry.entryType ?? "NONE";
-    if (allowedTypes !== null && !allowedTypes.includes(entryType)) continue;
+    if (allowedTypes !== null) {
+      if (allowedTypes.length === 1 && allowedTypes[0] === "NONE") {
+        // "memoirs" category: NONE entries whose eventId matches memoir pattern
+        if (!isMemoirEvent(eventId)) continue;
+      } else if (!allowedTypes.includes(entryType)) {
+        continue;
+      }
+    }
     events.push({
       eventId,
       name: entry.name ?? eventId,
@@ -371,6 +432,107 @@ export function readActivityFromStore(
 }
 
 // ---------------------------------------------------------------------------
+// Chardict + operator memoir helpers
+// ---------------------------------------------------------------------------
+
+function loadCharDict(store: JsonStore): Record<string, CharDictEntry> {
+  const descriptor = charDictStoreDescriptor(store);
+  if (descriptor !== null && charDictCache?.descriptor === descriptor) {
+    return charDictCache.data;
+  }
+  if (!store.exists(CHARDICT)) {
+    return {};
+  }
+  let data: Record<string, CharDictEntry>;
+  try {
+    data = store.readJson<Record<string, CharDictEntry>>(CHARDICT);
+  } catch {
+    data = {};
+  }
+  if (descriptor !== null) charDictCache = { descriptor, data };
+  return data;
+}
+
+function resolveOperatorCode(
+  charDict: Record<string, CharDictEntry>,
+  operatorName: string
+): string | null {
+  for (const [code, info] of Object.entries(charDict)) {
+    if (info.name === operatorName) return code;
+  }
+  return null;
+}
+
+function isMemoirEvent(eventId: string): boolean {
+  return MEMOIR_EVENT_RE.test(eventId);
+}
+
+export function getOperatorMemoirs(
+  zipPath: string,
+  operatorName: string,
+): OperatorMemoirResult {
+  return withStoryStore(zipPath, (store) => getOperatorMemoirsFromStore(store, operatorName));
+}
+
+export function getOperatorMemoirsFromStore(
+  store: JsonStore,
+  operatorName: string,
+): OperatorMemoirResult {
+  const charDict = loadCharDict(store);
+  if (Object.keys(charDict).length === 0) {
+    throw new Error("chardict.json 未在 story zip 中找到。");
+  }
+
+  const code = resolveOperatorCode(charDict, operatorName);
+  if (code === null) {
+    throw new Error(
+      `未找到干员名称 '${operatorName}' 对应的内部代码。请使用游戏内中文名称。`
+    );
+  }
+
+  const charInfo = charDict[code];
+  const operatorId = charInfo.id ?? "";
+
+  const table = store.readJson<Record<string, RawReviewEntry>>(STORY_REVIEW_TABLE);
+  const prefix = `story_${code}_set_`;
+  const memoirEvents = Object.keys(table)
+    .filter((eid) => eid.startsWith(prefix))
+    .sort((a, b) => {
+      const aNum = parseInt(a.split("_").pop() ?? "0", 10) || 0;
+      const bNum = parseInt(b.split("_").pop() ?? "0", 10) || 0;
+      return aNum - bNum;
+    });
+
+  if (memoirEvents.length === 0) {
+    throw new Error(`干员 '${operatorName}' (code=${code}) 暂无密录数据。`);
+  }
+
+  const chapters: MemoirChapter[] = [];
+  for (const eventId of memoirEvents) {
+    const entry = table[eventId];
+    const datas = (entry?.infoUnlockDatas ?? []).slice();
+    datas.sort((a, b) => (a.storySort ?? 0) - (b.storySort ?? 0));
+    for (const d of datas) {
+      if (!d.storyTxt) continue;
+      chapters.push({
+        eventId,
+        storyKey: d.storyTxt,
+        storyCode: d.storyCode ?? "",
+        storyName: d.storyName ?? "",
+      });
+    }
+  }
+
+  return {
+    operatorName,
+    internalCode: code,
+    operatorId,
+    totalChapters: chapters.length,
+    chapters,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Search helpers
 // ---------------------------------------------------------------------------
 
@@ -431,6 +593,11 @@ export function searchStoriesFromStore(
   maxResults = 30,
   eventId?: string,
 ): string {
+  if (maxResults < 1) return "max_results 必须 >= 1。";
+  if (maxResults > 100) return "max_results 必须 <= 100。";
+  if (contextLines < 0) return "context_lines 必须 >= 0。";
+  if (contextLines > 5) return "context_lines 必须 <= 5。";
+
   let regex: RegExp;
   try {
     regex = new RegExp(pattern, "i");
@@ -443,78 +610,47 @@ export function searchStoriesFromStore(
     return `无效的 line_type：${JSON.stringify(lineType)}，可选值：${valid}`;
   }
 
-  let table: Record<string, RawReviewEntry>;
+  let index: StorySearchIndex;
   try {
-    table = store.readJson<Record<string, RawReviewEntry>>(STORY_REVIEW_TABLE);
+    index = storySearchIndex(store);
   } catch (exc) {
     return `读取剧情数据索引失败：${exc instanceof Error ? exc.message : String(exc)}`;
   }
 
-  // Build active event list, excluding NONE entries
-  const activeEvents: Array<[string, RawReviewEntry]> = [];
-  for (const [evId, entry] of Object.entries(table)) {
-    if (eventId !== undefined && evId !== eventId) continue;
-    if ((entry.entryType ?? "NONE") === "NONE") continue;
-    activeEvents.push([evId, entry]);
-  }
-
-  if (eventId !== undefined && activeEvents.length === 0) {
+  if (eventId !== undefined && !index.eventIds.has(eventId)) {
     return `未找到匹配的活动：${JSON.stringify(eventId)}。`;
   }
 
   const results: SearchResult[] = [];
 
-  for (const [evId, entry] of activeEvents) {
+  for (const record of index.records) {
     if (results.length >= maxResults) break;
+    const chapter = index.chapters[record.chapterIndex];
+    const line = record.line;
 
-    const datas = (entry.infoUnlockDatas ?? []).slice();
-    datas.sort((a, b) => (a.storySort ?? 0) - (b.storySort ?? 0));
-
-    for (const d of datas) {
-      if (results.length >= maxResults) break;
-      if (!d.storyTxt) continue;
-      const storyCode = d.storyCode ?? "";
-
-      let chapter: StoryChapter;
-      try {
-        chapter = readStoryFromStore(store, d.storyTxt, true);
-      } catch (err) {
-        if (err instanceof SyntaxError) continue;
-        if (err instanceof Error && /not found/i.test(err.message)) continue;
-        throw err;
-      }
-
-      for (let i = 0; i < chapter.lines.length; i++) {
-        if (results.length >= maxResults) break;
-        const line = chapter.lines[i];
-
-        // --- filters ---
-        if (character !== undefined) {
-          if (line.type !== "dialog" || (line.role ?? "").toLowerCase() !== character.toLowerCase()) {
-            continue;
-          }
-        }
-        if (lineType !== undefined && line.type !== lineType) continue;
-
-        if (!regex.test(line.text)) continue;
-
-        // --- context collection ---
-        const start = Math.max(0, i - contextLines);
-        const end = Math.min(chapter.lines.length, i + contextLines + 1);
-        const ctxParts: string[] = [];
-        for (let j = start; j < end; j++) {
-          const prefix = j === i ? ">>> " : "    ";
-          ctxParts.push(prefix + formatStoryLine(chapter.lines[j]));
-        }
-
-        results.push({
-          eventId: evId,
-          storyCode,
-          lineNumber: i + 1,
-          context: ctxParts.join("\n"),
-        });
+    if (eventId !== undefined && chapter.eventId !== eventId) continue;
+    if (character !== undefined) {
+      if (line.type !== "dialog" || (line.role ?? "").toLowerCase() !== character.toLowerCase()) {
+        continue;
       }
     }
+    if (lineType !== undefined && line.type !== lineType) continue;
+    if (!regex.test(line.text)) continue;
+
+    const start = Math.max(0, record.lineIndex - contextLines);
+    const end = Math.min(chapter.lines.length, record.lineIndex + contextLines + 1);
+    const ctxParts: string[] = [];
+    for (let j = start; j < end; j++) {
+      const prefix = j === record.lineIndex ? ">>> " : "    ";
+      ctxParts.push(prefix + formatStoryLine(chapter.lines[j]));
+    }
+
+    results.push({
+      eventId: chapter.eventId,
+      storyCode: chapter.storyCode,
+      lineNumber: record.lineIndex + 1,
+      context: ctxParts.join("\n"),
+    });
   }
 
   if (results.length === 0) {
@@ -534,6 +670,92 @@ export function searchStoriesFromStore(
   }
 
   return parts.join("\n");
+}
+
+function storySearchIndex(store: JsonStore): StorySearchIndex {
+  const descriptor = storyStoreDescriptor(store);
+  if (descriptor !== null && storySearchCache?.descriptor === descriptor) {
+    return storySearchCache.index;
+  }
+  const index = buildStorySearchIndex(store);
+  if (descriptor !== null) storySearchCache = { descriptor, index };
+  return index;
+}
+
+function storyStoreDescriptor(store: JsonStore): string | null {
+  if (store instanceof ZipStore) {
+    const stat = statSync(store.zipPath, { bigint: true });
+    return `zip:${store.zipPath}:${stat.size}:${stat.mtimeNs}`;
+  }
+  if (store instanceof DirectoryStore) {
+    const review = join(store.root, STORY_REVIEW_TABLE);
+    try {
+      const stat = statSync(review, { bigint: true });
+      return `directory:${store.root}:${stat.size}:${stat.mtimeNs}`;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function charDictStoreDescriptor(store: JsonStore): string | null {
+  if (store instanceof ZipStore) {
+    try {
+      const stat = statSync(store.zipPath, { bigint: true });
+      return `zip:${store.zipPath}:${stat.size}:${stat.mtimeNs}:chardict`;
+    } catch {
+      return null;
+    }
+  }
+  if (store instanceof DirectoryStore) {
+    const chardict = join(store.root, CHARDICT);
+    try {
+      const stat = statSync(chardict, { bigint: true });
+      return `directory:${store.root}:${stat.size}:${stat.mtimeNs}:chardict`;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function buildStorySearchIndex(store: JsonStore): StorySearchIndex {
+  const table = store.readJson<Record<string, RawReviewEntry>>(STORY_REVIEW_TABLE);
+  const eventIds = new Set<string>();
+  const chapters: StorySearchChapter[] = [];
+  const records: StorySearchRecord[] = [];
+
+  for (const [evId, entry] of Object.entries(table)) {
+    const datas = (entry.infoUnlockDatas ?? []).slice();
+    if (datas.length === 0) continue;
+    // Only include NONE entries that are operator memoirs
+    if ((entry.entryType ?? "NONE") === "NONE" && !isMemoirEvent(evId)) continue;
+    eventIds.add(evId);
+    datas.sort((a, b) => (a.storySort ?? 0) - (b.storySort ?? 0));
+    for (const d of datas) {
+      if (!d.storyTxt) continue;
+      let chapter: StoryChapter;
+      try {
+        chapter = readStoryFromStore(store, d.storyTxt, true);
+      } catch (err) {
+        if (err instanceof SyntaxError) continue;
+        if (err instanceof Error && /not found/i.test(err.message)) continue;
+        throw err;
+      }
+      const chapterIndex = chapters.length;
+      chapters.push({
+        eventId: evId,
+        storyCode: d.storyCode ?? "",
+        lines: chapter.lines,
+      });
+      for (let i = 0; i < chapter.lines.length; i++) {
+        records.push({ chapterIndex, lineIndex: i, line: chapter.lines[i] });
+      }
+    }
+  }
+
+  return { eventIds, chapters, records };
 }
 
 // ---------------------------------------------------------------------------

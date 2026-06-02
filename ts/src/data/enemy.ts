@@ -14,6 +14,7 @@ import { DirectoryStore } from "./stores.js";
 let _handbook: EnemyHandbook | null = null;
 let _dbIndex: Record<string, EnemyDbEntry> | null = null;
 let _nameToEnemyId: Map<string, string> | null = null;
+let _enemySearchRecords: EnemySearchRecord[] | null = null;
 
 const HANDBOOK_FILE = "enemy_handbook_table.json";
 const DATABASE_FILE = "enemy_database.json";
@@ -22,6 +23,7 @@ export function clearEnemyCaches(): void {
   _handbook = null;
   _dbIndex = null;
   _nameToEnemyId = null;
+  _enemySearchRecords = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +101,11 @@ interface EnemyDbRow {
 
 interface EnemyDatabase {
   enemies?: EnemyDbRow[];
+}
+
+interface EnemySearchRecord {
+  info: EnemyHandbookEntry;
+  searchText: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -404,24 +411,23 @@ export function getEnemyInfo(name: string): string {
 
 export function searchEnemies(pattern: string, maxResults = 30): string {
   if (!hasEnemyData()) return missingDataMessage();
+  if (maxResults < 1) return "max_results 必须 >= 1。";
+  if (maxResults > 100) return "max_results 必须 <= 100。";
 
   let regex: RegExp;
   try { regex = new RegExp(pattern, "i"); } catch (err) {
     return `正则表达式无效：${err instanceof Error ? err.message : String(err)}`;
   }
 
-  let raw: EnemyHandbook;
-  try { raw = getHandbook(); } catch (err) {
+  let records: EnemySearchRecord[];
+  try { records = getEnemySearchRecords(); } catch (err) {
     return err instanceof Error ? err.message : String(err);
   }
 
-  const ed = raw.enemyData ?? {};
   const matches: EnemyHandbookEntry[] = [];
-  for (const info of Object.values(ed)) {
-    if (info.hideInHandbook) continue;
-    const searchable = `${info.name ?? ""} ${info.description ?? ""} ${info.ability ?? ""}`;
-    if (regex.test(searchable)) {
-      matches.push(info);
+  for (const record of records) {
+    if (regex.test(record.searchText)) {
+      matches.push(record.info);
       if (matches.length >= maxResults) break;
     }
   }
@@ -431,4 +437,21 @@ export function searchEnemies(pattern: string, maxResults = 30): string {
   const lines: string[] = [`# 搜索结果：${pattern}（共 ${matches.length} 个）\n`];
   for (const info of matches) { lines.push(fmtEnemy(info)); lines.push(""); }
   return lines.join("\n").trim();
+}
+
+function getEnemySearchRecords(): EnemySearchRecord[] {
+  if (_enemySearchRecords !== null) return _enemySearchRecords;
+  const ed = getHandbook().enemyData ?? {};
+  _enemySearchRecords = Object.values(ed)
+    .filter((info) => !info.hideInHandbook)
+    .map((info) => ({
+      info,
+      searchText: [
+        info.name ?? "",
+        info.description ?? "",
+        info.ability ?? "",
+        ...(info.enemyTags ?? []),
+      ].join(" "),
+    }));
+  return _enemySearchRecords;
 }

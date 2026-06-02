@@ -22,7 +22,7 @@ import { clearEnemyCaches, listEnemies, getEnemyInfo, searchEnemies } from "./da
 import { clearStageCaches, listStages, getStageInfo, searchStages } from "./data/stage.js";
 import { clearItemCaches, listItems, getItemInfo, searchItems } from "./data/item.js";
 import { clearStageEnemyCaches, getStageEnemies, getEnemyAppearances, getEnemyStageInfo } from "./data/stageEnemy.js";
-import { searchOperatorData } from "./data/search.js";
+import { clearSearchCaches, searchOperatorData } from "./data/search.js";
 import { syncRelease, syncReleaseArchive } from "./data/sync.js";
 import { archiveSpecForDataset, releaseSpecForDataset, GAMEDATA_EXCEL, GAMEDATA_LEVELS, STORY_ZH_CN } from "./data/datasets.js";
 import {
@@ -31,8 +31,10 @@ import {
   readStory as _readStory,
   readActivity as _readActivity,
   searchStories as _searchStories,
+  clearStoryCaches,
   getEventSummary as _getEventSummary,
   getStorySummary as _getStorySummary,
+  getOperatorMemoirs as _getOperatorMemoirs,
   type StoryChapter,
   type StoryLine,
 } from "./data/story.js";
@@ -460,10 +462,11 @@ function createMcpServer(): McpServer {
     "list_story_events",
     [
       "列出明日方舟剧情活动列表。",
-      "返回格式：每行 `- [类型] 活动ID：名称（N 章）`，类型为 MAINLINE / ACTIVITY / MINI_ACTIVITY 之一。",
+      "返回格式：每行 `- [类型] 活动ID：名称（N 章）`，类型为 MAINLINE / ACTIVITY / MINI_ACTIVITY / NONE 之一。",
       "获取活动 ID 后，可调用 list_stories 查看该活动的章节列表。",
+      "category=\"memoirs\" 可列出所有干员密录。",
     ].join(" "),
-    { category: z.string().optional().describe("可选过滤分类。\"main\" = 主线章节，\"activities\" = 活动剧情（含联动）。不填则返回全部活动。") },
+    { category: z.string().optional().describe("可选过滤分类。\"main\" = 主线章节，\"activities\" = 活动剧情（含联动），\"memoirs\" = 干员密录。不填则返回全部活动。") },
     ({ category }) => {
       let zipPath: string;
       try {
@@ -738,7 +741,9 @@ function createMcpServer(): McpServer {
               "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n" +
               "  使用 list_enemies / get_enemy_info / search_enemies 查询。\n" +
               "- items：物品/材料（名称、描述、用途、掉落、商店关联）。\n" +
-              "  使用 list_items / get_item_info / search_items 查询。",
+              "  使用 list_items / get_item_info / search_items 查询。\n" +
+              "- memoirs：干员密录剧情，可通过 get_operator_memoirs 按干员名查找。\n" +
+              "  获取 story_key 后使用 read_story 读取完整台词。",
           },
         ],
       };
@@ -801,6 +806,44 @@ function createMcpServer(): McpServer {
         return { content: [{ type: "text", text }] };
       } catch (e) {
         return { content: [{ type: "text", text: `剧情搜索失败：${e instanceof Error ? e.message : String(e)}` }] };
+      }
+    }
+  );
+
+  server.tool(
+    "get_operator_memoirs",
+    [
+      "根据干员名称查询干员密录剧情。",
+      "返回干员的密录章节列表，包含章节 key（story_key）和元数据。",
+      "获取 story_key 后可传入 read_story 读取密录台词。",
+      "若需先查找正确的干员名称，可使用 search_data 搜索干员数据。",
+    ].join(" "),
+    {
+      operator_name: z.string().describe("干员的游戏内中文名，如「阿米娅」、「能天使」。"),
+    },
+    ({ operator_name }) => {
+      let zipPath: string;
+      try {
+        zipPath = requireStoryZip();
+      } catch (e) {
+        return { content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }] };
+      }
+      try {
+        const result = _getOperatorMemoirs(zipPath, operator_name);
+        const lines: string[] = [
+          `# ${result.operatorName}（code: ${result.internalCode}，id: ${result.operatorId}）`,
+          `共 ${result.totalChapters} 章密录\n`,
+        ];
+        for (const ch of result.chapters) {
+          lines.push(`- ${ch.storyCode} ${ch.storyName}（key: ${ch.storyKey}）`);
+        }
+        return { content: [{ type: "text", text: lines.join("\n") }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("未找到干员名称") || msg.includes("暂无密录数据")) {
+          return { content: [{ type: "text", text: msg }] };
+        }
+        return { content: [{ type: "text", text: `查询干员密录失败：${msg}` }] };
       }
     }
   );
@@ -883,6 +926,7 @@ async function runStartupSync(): Promise<void> {
         clearStageCaches();
         clearItemCaches();
         clearStageEnemyCaches();
+        clearSearchCaches();
         log("INFO", `Data updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
       } else if (r.status === "up_to_date") {
         log("INFO", `Data is up to date (${r.spec.repo} @ ${sha}).`);
@@ -948,6 +992,7 @@ async function runStartupSync(): Promise<void> {
       const r = await syncRelease(releaseSpec);
       const sha = r.commitSha ? r.commitSha.slice(0, 8) : "unknown";
       if (r.status === "updated") {
+        clearStoryCaches();
         log("INFO", `Storyjson updated from GitHub Release (${r.spec.repo} @ ${sha}).`);
       } else if (r.status === "up_to_date") {
         log("INFO", `Storyjson is up to date (${r.spec.repo} @ ${sha}).`);

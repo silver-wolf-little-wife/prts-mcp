@@ -17,6 +17,13 @@ def clear_operator_caches() -> None:
     _load_handbook_table.cache_clear()
     _load_charword_table.cache_clear()
     _build_name_to_id.cache_clear()
+    # Lazy import to break circular dependency (search imports from operator).
+    try:
+        from prts_mcp.data.search import clear_search_caches
+
+        clear_search_caches()
+    except ImportError:
+        pass
 
 
 def _missing_operator_data_message() -> str:

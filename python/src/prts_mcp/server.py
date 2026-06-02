@@ -54,6 +54,7 @@ from prts_mcp.data.story import (
     search_stories as _search_stories,
     get_event_summary as _get_event_summary,
     get_story_summary as _get_story_summary,
+    get_operator_memoirs as _get_operator_memoirs,
 )
 
 logging.basicConfig(
@@ -286,7 +287,7 @@ def get_enemy_info(
 @mcp.tool()
 def search_enemies(
     pattern: Annotated[str, Field(description="正则表达式模式，如 '萨卡兹|骑士'。")],
-    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="返回结果数量上限，默认 30。")] = 30,
 ) -> str:
     """在敌人图鉴中进行全文正则搜索。
 
@@ -351,7 +352,7 @@ def get_stage_info(
 @mcp.tool()
 def search_stages(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。例如 'H10'、'切尔诺伯格'。")],
-    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="最多返回条数，默认 30。")] = 30,
 ) -> str:
     """在关卡数据库中执行全文正则搜索。
 
@@ -388,7 +389,7 @@ def get_item_info(
 @mcp.tool()
 def search_items(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，如「源岩|装置」。")],
-    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="返回结果数量上限，默认 30。")] = 30,
 ) -> str:
     """在物品/材料数据中进行全文正则搜索。
 
@@ -399,12 +400,13 @@ def search_items(
 
 @mcp.tool()
 def list_story_events(
-    category: Annotated[str | None, Field(default=None, description="可选过滤分类。\"main\" = 主线章节，\"activities\" = 活动剧情（含联动）。不填则返回全部活动。")] = None,
+    category: Annotated[str | None, Field(default=None, description="可选过滤分类。\"main\" = 主线章节，\"activities\" = 活动剧情（含联动），\"memoirs\" = 干员密录。不填则返回全部活动。")] = None,
 ) -> str:
     """列出明日方舟剧情活动列表。
 
     返回格式：每行 `- [类型] 活动ID：名称（N 章）`，类型为 MAINLINE / ACTIVITY /
-    MINI_ACTIVITY 之一。获取活动 ID 后，可调用 list_stories 查看该活动的章节列表。
+    MINI_ACTIVITY / NONE 之一。获取活动 ID 后，可调用 list_stories 查看该活动的章节列表。
+    category=\"memoirs\" 可列出所有干员密录。
     """
     from prts_mcp.config import Config
     cfg = Config.load()
@@ -645,7 +647,9 @@ def list_search_scopes() -> str:
         "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n"
         "  使用 list_enemies / get_enemy_info / search_enemies 查询。\n"
         "- items：物品/材料（名称、描述、用途、掉落、商店关联）。\n"
-        "  使用 list_items / get_item_info / search_items 查询。"
+        "  使用 list_items / get_item_info / search_items 查询。\n"
+        "- memoirs：干员密录剧情，可通过 get_operator_memoirs 按干员名查找。\n"
+        "  获取 story_key 后使用 read_story 读取完整台词。"
     )
 
 
@@ -653,7 +657,7 @@ def list_search_scopes() -> str:
 def search_data(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。例如「博士」、「法术伤害」。")],
     scope: Annotated[str, Field(default="operators", description="搜索域，目前支持 \"operators\"。")] = "operators",
-    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="最多返回条数，默认 30。")] = 30,
 ) -> str:
     """在干员数据中执行全文正则搜索。
 
@@ -673,8 +677,8 @@ def search_stories(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。")],
     character: Annotated[str | None, Field(default=None, description="按说话角色名过滤（仅匹配 dialog 行），如「博士」、「阿米娅」。")] = None,
     line_type: Annotated[str | None, Field(default=None, description="台词类型过滤：dialog（对话）、narration（旁白）、choice（选项）。")] = None,
-    context_lines: Annotated[int, Field(default=1, description="匹配行前后的上下文行数，默认 1。设 0 则只返回匹配行本身。")] = 1,
-    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+    context_lines: Annotated[int, Field(default=1, ge=0, le=5, description="匹配行前后的上下文行数，默认 1。设 0 则只返回匹配行本身。")] = 1,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="最多返回条数，默认 30。")] = 30,
     event_id: Annotated[str | None, Field(default=None, description="限定活动 ID，如「act31side」。不填则搜索全部活动。")] = None,
 ) -> str:
     """在剧情台词中执行全文正则搜索，支持角色和台词类型过滤。
@@ -702,6 +706,39 @@ def search_stories(
         )
     except Exception as e:
         return f"剧情搜索失败：{e}"
+
+
+@mcp.tool()
+def get_operator_memoirs(
+    operator_name: Annotated[str, Field(description="干员的游戏内中文名，如「阿米娅」、「能天使」。")],
+) -> str:
+    """根据干员名称查询干员密录剧情。
+
+    返回干员的密录章节列表，包含章节 key（story_key）和元数据。
+    获取 story_key 后可传入 read_story 读取密录台词。
+    若需先查找正确的干员名称，可使用 search_data 搜索干员数据。
+    """
+    from prts_mcp.config import Config
+    cfg = Config.load()
+    try:
+        zip_path = _require_story_zip(cfg)
+    except RuntimeError as e:
+        return str(e)
+
+    try:
+        result = _get_operator_memoirs(zip_path, operator_name)
+    except KeyError as e:
+        return str(e)
+    except Exception as e:
+        return f"查询干员密录失败：{e}"
+
+    lines = [
+        f"# {result.operator_name}（code: {result.internal_code}，id: {result.operator_id}）",
+        f"共 {result.total_chapters} 章密录\n",
+    ]
+    for ch in result.chapters:
+        lines.append(f"- {ch.story_code} {ch.story_name}（key: {ch.story_key}）")
+    return "\n".join(lines)
 
 
 def _sync_needs_retry(status: str) -> bool:
@@ -833,6 +870,10 @@ def _run_startup_sync() -> None:
         def _sync_storyjson() -> bool:
             r = sync_release(release_spec)
             _log_sync_result(r)
+            if r.status == "updated":
+                from prts_mcp.data.story import clear_story_caches
+
+                clear_story_caches()
             return _sync_needs_retry(r.status)
 
         needs_retry = _run_initial_sync(

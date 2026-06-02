@@ -42,7 +42,16 @@ interface SearchResult {
   text: string;
 }
 
+let operatorSearchRecords: SearchResult[] | null = null;
+
+export function clearSearchCaches(): void {
+  operatorSearchRecords = null;
+}
+
 export function searchOperatorData(pattern: string, maxResults = 30): string {
+  if (maxResults < 1) return "max_results 必须 >= 1。";
+  if (maxResults > 100) return "max_results 必须 <= 100。";
+
   const cfg = loadConfig();
   if (!hasOperatorData(cfg)) {
     return (
@@ -60,88 +69,17 @@ export function searchOperatorData(pattern: string, maxResults = 30): string {
     return `正则表达式无效：${exc instanceof Error ? exc.message : String(exc)}`;
   }
 
-  let ct: Record<string, { name?: string; description?: string }>;
-  let handbook: HandbookTable;
-  let charwords: CharwordTable;
+  const results: SearchResult[] = [];
+  let records: SearchResult[];
   try {
-    ct = getCharacterTable();
-    handbook = getHandbookTable();
-    charwords = getCharwordTable();
+    records = getOperatorSearchRecords();
   } catch (err) {
     return err instanceof Error ? err.message : String(err);
   }
-
-  // Build name → id and charId → voice entries index
-  const nameToId = new Map<string, string>();
-  for (const [cid, info] of Object.entries(ct)) {
-    if (info.name && cid.startsWith("char_")) nameToId.set(info.name, cid);
-  }
-
-  const charidToVoices = new Map<string, CharwordEntry[]>();
-  for (const entry of Object.values(charwords.charWords ?? {})) {
-    if (entry.charId && entry.voiceText) {
-      const list = charidToVoices.get(entry.charId);
-      if (list) {
-        list.push(entry);
-      } else {
-        charidToVoices.set(entry.charId, [entry]);
-      }
-    }
-  }
-
-  const results: SearchResult[] = [];
-
-  for (const [name, charId] of nameToId) {
-    if (results.length >= maxResults) break;
-    const info = ct[charId];
-    if (!info) continue;
-
-    // --- basic: operator name ---
-    if (regex.test(name)) {
-      results.push({ operator: name, category: "basic", field: "干员名称", text: name });
+  for (const record of records) {
+    if (regex.test(record.text)) {
+      results.push(record);
       if (results.length >= maxResults) break;
-    }
-
-    // --- basic: description ---
-    const desc = info.description ?? "";
-    if (desc) {
-      const cleaned = stripWikitext(desc);
-      if (regex.test(cleaned)) {
-        results.push({ operator: name, category: "basic", field: "攻击属性", text: cleaned });
-        if (results.length >= maxResults) break;
-      }
-    }
-
-    // --- archives ---
-    const hbEntry = handbook.handbookDict?.[charId];
-    if (hbEntry) {
-      for (const story of hbEntry.storyTextAudio ?? []) {
-        if (results.length >= maxResults) break;
-        const title = story.storyTitle ?? "";
-        for (const s of story.stories ?? []) {
-          if (results.length >= maxResults) break;
-          const text = s.storyText ?? "";
-          if (text && regex.test(text)) {
-            results.push({ operator: name, category: "archives", field: title, text });
-          }
-        }
-      }
-    }
-
-    // --- voicelines ---
-    const voices = charidToVoices.get(charId);
-    if (voices) {
-      for (const v of voices) {
-        if (results.length >= maxResults) break;
-        if (regex.test(v.voiceText!)) {
-          results.push({
-            operator: name,
-            category: "voicelines",
-            field: v.voiceTitle ?? "未知",
-            text: v.voiceText!,
-          });
-        }
-      }
     }
   }
 
@@ -157,4 +95,62 @@ export function searchOperatorData(pattern: string, maxResults = 30): string {
   }
 
   return blocks.join("");
+}
+
+function getOperatorSearchRecords(): SearchResult[] {
+  if (operatorSearchRecords !== null) return operatorSearchRecords;
+
+  const ct = getCharacterTable();
+  const handbook = getHandbookTable();
+  const charwords = getCharwordTable();
+
+  const nameToId = new Map<string, string>();
+  for (const [cid, info] of Object.entries(ct)) {
+    if (info.name && cid.startsWith("char_")) nameToId.set(info.name, cid);
+  }
+
+  const charidToVoices = new Map<string, CharwordEntry[]>();
+  for (const entry of Object.values(charwords.charWords ?? {})) {
+    if (entry.charId && entry.voiceText) {
+      const list = charidToVoices.get(entry.charId);
+      if (list) list.push(entry);
+      else charidToVoices.set(entry.charId, [entry]);
+    }
+  }
+
+  const records: SearchResult[] = [];
+  for (const [name, charId] of nameToId) {
+    const info = ct[charId];
+    if (!info) continue;
+
+    records.push({ operator: name, category: "basic", field: "干员名称", text: name });
+
+    const desc = info.description ?? "";
+    if (desc) {
+      records.push({ operator: name, category: "basic", field: "攻击属性", text: stripWikitext(desc) });
+    }
+
+    const hbEntry = handbook.handbookDict?.[charId];
+    if (hbEntry) {
+      for (const story of hbEntry.storyTextAudio ?? []) {
+        const title = story.storyTitle ?? "";
+        for (const s of story.stories ?? []) {
+          const text = s.storyText ?? "";
+          if (text) records.push({ operator: name, category: "archives", field: title, text });
+        }
+      }
+    }
+
+    for (const v of charidToVoices.get(charId) ?? []) {
+      records.push({
+        operator: name,
+        category: "voicelines",
+        field: v.voiceTitle ?? "未知",
+        text: v.voiceText!,
+      });
+    }
+  }
+
+  operatorSearchRecords = records;
+  return records;
 }

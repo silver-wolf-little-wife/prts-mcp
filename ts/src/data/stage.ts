@@ -34,6 +34,12 @@ interface ZoneEntry {
 
 type ZoneTable = Record<string, ZoneEntry>;
 
+interface StageSearchRecord {
+  stageId: string;
+  entry: StageEntry;
+  searchText: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -65,11 +71,13 @@ const DIFFICULTY_LABELS: Record<string, string> = {
 let _stageTable: StageTable | null = null;
 let _zoneTable: ZoneTable | null = null;
 let _zoneTableFailed = false;
+let _stageSearchRecords: StageSearchRecord[] | null = null;
 
 export function clearStageCaches(): void {
   _stageTable = null;
   _zoneTable = null;
   _zoneTableFailed = false;
+  _stageSearchRecords = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +316,7 @@ export function getStageInfo(stageId: string): string {
 
 export function searchStages(pattern: string, maxResults: number = 30): string {
   if (maxResults < 1) return "max_results 必须 >= 1。";
+  if (maxResults > 100) return "max_results 必须 <= 100。";
 
   let regex: RegExp;
   try {
@@ -316,25 +325,17 @@ export function searchStages(pattern: string, maxResults: number = 30): string {
     return `正则表达式无效：${e instanceof Error ? e.message : String(e)}`;
   }
 
-  let stages: StageTable;
+  let records: StageSearchRecord[];
   try {
-    stages = getStageTable();
+    records = getStageSearchRecords();
   } catch (e) {
     return missingDataMessage() + `（${e instanceof Error ? e.message : String(e)}）`;
   }
 
-  const matched: StageEntry[] = [];
-  for (const [, entry] of Object.entries(stages).sort(([a], [b]) => a.localeCompare(b))) {
-    const searchText =
-      (entry.name ?? "") +
-      " " +
-      (entry.code ?? "") +
-      " " +
-      cleanDescription(entry.description ?? "") +
-      " " +
-      (entry.stageType ?? "");
-    if (regex.test(searchText)) {
-      matched.push(entry);
+  const matched: StageSearchRecord[] = [];
+  for (const record of records) {
+    if (regex.test(record.searchText)) {
+      matched.push(record);
       if (matched.length >= maxResults) break;
     }
   }
@@ -342,7 +343,8 @@ export function searchStages(pattern: string, maxResults: number = 30): string {
   if (matched.length === 0) return `未找到匹配 '${pattern}' 的关卡。`;
 
   const lines = [`# 搜索结果：${pattern}（共 ${matched.length} 个）`];
-  for (const e of matched) {
+  for (const record of matched) {
+    const e = record.entry;
     const name = e.name || "（无名）";
     const code = e.code || "?";
     const tLabel = stageTypeLabel(e.stageType ?? "");
@@ -351,7 +353,7 @@ export function searchStages(pattern: string, maxResults: number = 30): string {
     const ap = e.apCost ?? "?";
     const cdesc = cleanDescription(e.description ?? "");
 
-    const sid = e.stageId ?? "";
+    const sid = record.stageId;
     lines.push(`\n## ${name} [${tLabel}] ${code}（id: ${sid}）`);
     lines.push(`- **区域**：${zd}`);
     lines.push(`- **难度**：${dLabel}`);
@@ -360,4 +362,22 @@ export function searchStages(pattern: string, maxResults: number = 30): string {
   }
 
   return lines.join("\n");
+}
+
+function getStageSearchRecords(): StageSearchRecord[] {
+  if (_stageSearchRecords !== null) return _stageSearchRecords;
+  _stageSearchRecords = Object.entries(getStageTable())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([stageId, entry]) => ({
+      stageId,
+      entry,
+      searchText: [
+        entry.name ?? "",
+        entry.code ?? "",
+        cleanDescription(entry.description ?? ""),
+        entry.stageType ?? "",
+        stageId,
+      ].join(" "),
+    }));
+  return _stageSearchRecords;
 }

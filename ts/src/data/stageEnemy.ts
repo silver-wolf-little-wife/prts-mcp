@@ -66,12 +66,14 @@ let stageTable: Record<string, StageEntry> | null = null;
 let enemyHandbook: Record<string, EnemyHandbookEntry> | null = null;
 let enemyDatabase: Record<string, Record<number, EnemyData>> | null = null;
 let nameToEnemyId: Map<string, string> | null = null;
+let enemyAppearanceIndex: Map<string, Array<[string, number]>> | null = null;
 
 export function clearStageEnemyCaches(): void {
   stageTable = null;
   enemyHandbook = null;
   enemyDatabase = null;
   nameToEnemyId = null;
+  enemyAppearanceIndex = null;
 }
 
 function excelStore(): DirectoryStore {
@@ -301,7 +303,12 @@ export function getStageEnemies(stageId: string): string {
 }
 
 function findEnemyAppearances(enemyId: string): Array<[string, number]> {
-  const appearances: Array<[string, number]> = [];
+  return getEnemyAppearanceIndex().get(enemyId) ?? [];
+}
+
+function getEnemyAppearanceIndex(): Map<string, Array<[string, number]>> {
+  if (enemyAppearanceIndex !== null) return enemyAppearanceIndex;
+  const index = new Map<string, Array<[string, number]>>();
   const stages = loadStageTable();
   const store = levelsStore();
   for (const [stageId, stage] of Object.entries(stages)) {
@@ -310,10 +317,14 @@ function findEnemyAppearances(enemyId: string): Array<[string, number]> {
     if (!store.exists(path)) continue;
     const level = store.readJson<LevelJson>(path);
     if (!level || typeof level !== "object" || Array.isArray(level)) continue;
-    const count = spawnCounts(level).get(enemyId);
-    if (count) appearances.push([stageId, count]);
+    for (const [enemyId, count] of spawnCounts(level)) {
+      const appearances = index.get(enemyId);
+      if (appearances) appearances.push([stageId, count]);
+      else index.set(enemyId, [[stageId, count]]);
+    }
   }
-  return appearances;
+  enemyAppearanceIndex = index;
+  return enemyAppearanceIndex;
 }
 
 function resolveEnemyId(name: string): string | null {

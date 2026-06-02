@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -16,10 +17,17 @@ def clear_enemy_caches() -> None:
     _load_enemy_handbook.cache_clear()
     _load_enemy_database.cache_clear()
     _build_enemy_name_to_id.cache_clear()
+    _enemy_search_records.cache_clear()
 
 
 _HANDBOOK_FILE = "enemy_handbook_table.json"
 _DATABASE_FILE = "enemy_database.json"
+
+
+@dataclass(frozen=True)
+class _EnemySearchRecord:
+    info: dict[str, Any]
+    search_text: str
 
 
 def _missing_data_message() -> str:
@@ -383,27 +391,24 @@ def search_enemies(pattern: str, max_results: int = 30) -> str:
     """Regex search across enemy names and descriptions."""
     if not _has_enemy_data():
         return _missing_data_message()
+    if max_results < 1:
+        return "max_results 必须 >= 1。"
+    if max_results > 100:
+        return "max_results 必须 <= 100。"
 
     try:
         regex = re.compile(pattern, re.IGNORECASE)
     except re.error as exc:
         return f"正则表达式无效：{exc}"
 
+    matches: list[dict] = []
     try:
-        raw = _load_enemy_handbook()
+        records = _enemy_search_records()
     except FileNotFoundError as exc:
         return str(exc)
-
-    ed = raw.get("enemyData", {})
-    matches: list[dict] = []
-    for _eid, info in ed.items():
-        if info.get("hideInHandbook"):
-            continue
-        name = info.get("name") or ""
-        desc = info.get("description") or ""
-        ability = info.get("ability") or ""
-        if regex.search(f"{name} {desc} {ability}"):
-            matches.append(info)
+    for record in records:
+        if regex.search(record.search_text):
+            matches.append(record.info)
         if len(matches) >= max_results:
             break
 
@@ -415,3 +420,21 @@ def search_enemies(pattern: str, max_results: int = 30) -> str:
         lines.append(_fmt_enemy(info))
         lines.append("")
     return "\n".join(lines).strip()
+
+
+@lru_cache(maxsize=1)
+def _enemy_search_records() -> tuple[_EnemySearchRecord, ...]:
+    raw = _load_enemy_handbook()
+    ed = raw.get("enemyData", {})
+    records: list[_EnemySearchRecord] = []
+    for _eid, info in ed.items():
+        if info.get("hideInHandbook"):
+            continue
+        search_text = " ".join([
+            info.get("name") or "",
+            info.get("description") or "",
+            info.get("ability") or "",
+            " ".join(info.get("enemyTags") or []),
+        ])
+        records.append(_EnemySearchRecord(info=info, search_text=search_text))
+    return tuple(records)

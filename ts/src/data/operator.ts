@@ -9,6 +9,7 @@
 import { loadConfig, hasOperatorData } from "../config.js";
 import { DirectoryStore } from "./stores.js";
 import { stripWikitext } from "../utils/sanitizer.js";
+import { clearSearchCaches } from "./search.js";
 
 // ---------------------------------------------------------------------------
 // Module-level lazy caches
@@ -31,6 +32,8 @@ export function clearOperatorCaches(): void {
   _handbookTable = null;
   _charwordTable = null;
   _nameToId = null;
+  // Propagate to search cache; see Python operator.clear_operator_caches.
+  clearSearchCaches();
 }
 
 // ---------------------------------------------------------------------------

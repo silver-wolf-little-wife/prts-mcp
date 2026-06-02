@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from prts_mcp.data.stores import JsonStore, ZipStore
+from prts_mcp.data.stores import DirectoryStore, JsonStore, ZipStore
 
 # ---------------------------------------------------------------------------
 # Zip path constants
@@ -25,11 +26,13 @@ _STORY_REVIEW_TABLE = "zh_CN/gamedata/excel/story_review_table.json"
 _STORYINFO = "zh_CN/storyinfo.json"
 _SUMMARIES = "zh_CN/summaries.json"
 _EVENT_SUMMARIES = "zh_CN/event_summaries.json"
+_CHARDICT = "zh_CN/chardict.json"
 
 # entryType values → user-facing category strings
 _CATEGORY_MAP: dict[str, list[str]] = {
     "main": ["MAINLINE"],
     "activities": ["ACTIVITY", "MINI_ACTIVITY"],
+    "memoirs": ["NONE"],
 }
 
 
@@ -42,6 +45,7 @@ def _story_zip_path(story_key: str) -> str:
 # ---------------------------------------------------------------------------
 
 _RICH_TAG_RE = re.compile(r"<[^>]+>")
+_MEMOIR_EVENT_RE = re.compile(r"^story_([a-z0-9_]+)_set_\d+$")
 
 
 def _clean_text(text: str) -> str:
@@ -98,6 +102,50 @@ class ActivityResult:
     total_chapters: int
     has_more: bool
     chapters: list[StoryChapter]
+
+
+@dataclass(frozen=True)
+class MemoirChapter:
+    event_id: str
+    story_key: str
+    story_code: str
+    story_name: str
+
+
+@dataclass(frozen=True)
+class OperatorMemoirResult:
+    operator_name: str
+    internal_code: str
+    operator_id: str
+    total_chapters: int
+    chapters: list[MemoirChapter]
+
+
+@dataclass(frozen=True)
+class _StorySearchChapter:
+    event_id: str
+    story_code: str
+    lines: tuple[StoryLine, ...]
+
+
+@dataclass(frozen=True)
+class _StorySearchRecord:
+    chapter_index: int
+    line_index: int
+    line: StoryLine
+
+
+@dataclass(frozen=True)
+class _StorySearchIndex:
+    event_ids: frozenset[str]
+    chapters: tuple[_StorySearchChapter, ...]
+    records: tuple[_StorySearchRecord, ...]
+
+
+def clear_story_caches() -> None:
+    """Clear cached story search indexes after story data changes."""
+    _cached_story_search_index.cache_clear()
+    _cached_chardict.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +226,13 @@ def list_story_events_from_store(
     events = []
     for event_id, entry in table.items():
         entry_type = entry.get("entryType", "NONE")
-        if allowed_types is not None and entry_type not in allowed_types:
-            continue
+        if allowed_types is not None:
+            if allowed_types == ["NONE"]:
+                # "memoirs" category: NONE entries whose event_id matches memoir pattern
+                if not _is_memoir_event(event_id):
+                    continue
+            elif entry_type not in allowed_types:
+                continue
         story_count = len(entry.get("infoUnlockDatas") or [])
         events.append(EventInfo(
             event_id=event_id,
@@ -357,10 +410,144 @@ def read_activity_from_store(
     )
 
 
+def _load_chardict(store: JsonStore) -> dict[str, dict[str, object]]:
+    """Load chardict.json from the story store."""
+    descriptor = _chardict_store_descriptor(store)
+    if descriptor is not None:
+        return _cached_chardict(descriptor)
+    if not store.exists(_CHARDICT):
+        return {}
+    return _read_chardict_from_store(store)
+
+
+def _read_chardict_from_store(store: JsonStore) -> dict[str, dict[str, object]]:
+    try:
+        data: dict = _load_json(store, _CHARDICT)  # type: ignore[assignment]
+        return {str(k): v for k, v in data.items() if isinstance(v, dict)}
+    except (KeyError, FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _chardict_store_descriptor(store: JsonStore) -> tuple[str, str, int, int] | None:
+    if isinstance(store, ZipStore):
+        path = store.zip_path.resolve()
+        if not path.is_file():
+            return None
+        stat = path.stat()
+        return ("zip", str(path), stat.st_size, stat.st_mtime_ns)
+    if isinstance(store, DirectoryStore):
+        root = store.root.resolve()
+        chardict = root / _CHARDICT
+        if not chardict.is_file():
+            return None
+        stat = chardict.stat()
+        return ("directory", str(root), stat.st_size, stat.st_mtime_ns)
+    return None
+
+
+@lru_cache(maxsize=4)
+def _cached_chardict(
+    descriptor: tuple[str, str, int, int],
+) -> dict[str, dict[str, object]]:
+    kind, source, _size, _mtime_ns = descriptor
+    store: JsonStore
+    if kind == "zip":
+        store = ZipStore(source)
+    else:
+        store = DirectoryStore(source)
+    try:
+        return _read_chardict_from_store(store)
+    finally:
+        store.close()
+
+
+def _resolve_operator_code(
+    chardict: dict[str, dict[str, object]],
+    operator_name: str,
+) -> str | None:
+    """Reverse lookup: operator display name -> internal code (e.g. '能天使' -> 'angel')."""
+    for code, info in chardict.items():
+        if info.get("name") == operator_name:
+            return code
+    return None
+
+
+def _is_memoir_event(event_id: str) -> bool:
+    """Check if an event_id matches the memoir pattern story_{code}_set_N."""
+    return bool(_MEMOIR_EVENT_RE.match(event_id))
+
+
+def get_operator_memoirs(
+    zip_path: Path,
+    operator_name: str,
+) -> OperatorMemoirResult:
+    """Return all memoir chapters for an operator by Chinese name.
+
+    Raises:
+        KeyError: If the operator is not found in chardict or has no memoirs.
+    """
+    with _story_store(zip_path) as store:
+        return get_operator_memoirs_from_store(store, operator_name)
+
+
+def get_operator_memoirs_from_store(
+    store: JsonStore,
+    operator_name: str,
+) -> OperatorMemoirResult:
+    """Return all memoir chapters for an operator by Chinese name using a JSON store."""
+    chardict = _load_chardict(store)
+    if not chardict:
+        raise KeyError("chardict.json 未在 story zip 中找到。")
+
+    code = _resolve_operator_code(chardict, operator_name)
+    if code is None:
+        raise KeyError(
+            f"未找到干员名称 '{operator_name}' 对应的内部代码。请使用游戏内中文名称。"
+        )
+
+    char_info = chardict[code]
+    operator_id = char_info.get("id", "")
+
+    table: dict = _load_json(store, _STORY_REVIEW_TABLE)  # type: ignore[assignment]
+    prefix = f"story_{code}_set_"
+    memoir_events = sorted(
+        (eid for eid in table if eid.startswith(prefix)),
+        key=lambda eid: int(eid.rsplit("_", 1)[-1]) if eid.rsplit("_", 1)[-1].isdigit() else 0,
+    )
+
+    if not memoir_events:
+        raise KeyError(f"干员 '{operator_name}' (code={code}) 暂无密录数据。")
+
+    chapters: list[MemoirChapter] = []
+    for event_id in memoir_events:
+        entry = table[event_id]
+        datas = sorted(
+            entry.get("infoUnlockDatas") or [],
+            key=lambda x: x.get("storySort", 0),
+        )
+        for d in datas:
+            story_key = d.get("storyTxt")
+            if not story_key:
+                continue
+            chapters.append(MemoirChapter(
+                event_id=event_id,
+                story_key=story_key,
+                story_code=d.get("storyCode", ""),
+                story_name=d.get("storyName", ""),
+            ))
+
+    return OperatorMemoirResult(
+        operator_name=operator_name,
+        internal_code=code,
+        operator_id=operator_id,
+        total_chapters=len(chapters),
+        chapters=chapters,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Search helpers
 # ---------------------------------------------------------------------------
-
 
 def _format_story_line(line: StoryLine) -> str:
     """Format a single StoryLine for display in search results."""
@@ -424,6 +611,15 @@ def search_stories_from_store(
     Returns:
         Formatted multi-block search result string.
     """
+    if max_results < 1:
+        return "max_results 必须 >= 1。"
+    if max_results > 100:
+        return "max_results 必须 <= 100。"
+    if context_lines < 0:
+        return "context_lines 必须 >= 0。"
+    if context_lines > 5:
+        return "context_lines 必须 <= 5。"
+
     try:
         regex = re.compile(pattern, re.IGNORECASE)
     except re.error as exc:
@@ -432,78 +628,45 @@ def search_stories_from_store(
     if line_type is not None and line_type not in _VALID_LINE_TYPES:
         return f"无效的 line_type：{line_type!r}，可选值：{', '.join(sorted(_VALID_LINE_TYPES))}"
 
-    # --- build active event list --------------------------------------------------
     try:
-        table: dict = _load_json(store, _STORY_REVIEW_TABLE)
+        index = _story_search_index(store)
     except Exception as exc:
         return f"读取剧情数据索引失败：{exc}"
 
-    # Respect the same category semantics as list_story_events
-    active_events: list[tuple[str, dict]] = []
-    for ev_id, entry in table.items():
-        if event_id is not None and ev_id != event_id:
-            continue
-        if entry.get("entryType", "NONE") == "NONE":
-            continue
-        active_events.append((ev_id, entry))
-
-    if event_id is not None and not active_events:
+    if event_id is not None and event_id not in index.event_ids:
         return f"未找到匹配的活动：{event_id!r}。"
 
     results: list[dict] = []
 
-    for ev_id, entry in active_events:
+    for record in index.records:
         if len(results) >= max_results:
             break
 
-        datas = sorted(
-            entry.get("infoUnlockDatas") or [],
-            key=lambda x: x.get("storySort", 0),
-        )
-
-        for d in datas:
-            if len(results) >= max_results:
-                break
-            story_key = d.get("storyTxt")
-            if not story_key:
+        chapter = index.chapters[record.chapter_index]
+        line = record.line
+        if event_id is not None and chapter.event_id != event_id:
+            continue
+        if character is not None:
+            if line.type != "dialog" or (line.role or "").lower() != character.lower():
                 continue
-            story_code = d.get("storyCode", "")
+        if line_type is not None and line.type != line_type:
+            continue
+        if not regex.search(line.text):
+            continue
 
-            try:
-                chapter = read_story_from_store(
-                    store, story_key, include_narration=True,
-                )
-            except (KeyError, FileNotFoundError, json.JSONDecodeError):
-                continue
+        start = max(0, record.line_index - context_lines)
+        end = min(len(chapter.lines), record.line_index + context_lines + 1)
+        ctx_parts: list[str] = []
+        for j in range(start, end):
+            prefix = ">>> " if j == record.line_index else "    "
+            ctx_parts.append(prefix + _format_story_line(chapter.lines[j]))
 
-            for i, line in enumerate(chapter.lines):
-                if len(results) >= max_results:
-                    break
-
-                # --- filters ---
-                if character is not None:
-                    if line.type != "dialog" or (line.role or "").lower() != character.lower():
-                        continue
-                if line_type is not None and line.type != line_type:
-                    continue
-
-                if not regex.search(line.text):
-                    continue
-
-                # --- context collection ---
-                start = max(0, i - context_lines)
-                end = min(len(chapter.lines), i + context_lines + 1)
-                ctx_parts: list[str] = []
-                for j in range(start, end):
-                    prefix = ">>> " if j == i else "    "
-                    ctx_parts.append(prefix + _format_story_line(chapter.lines[j]))
-
-                results.append({
-                    "event_id": ev_id,
-                    "story_code": story_code,
-                    "line_number": i + 1,
-                    "context": "\n".join(ctx_parts),
-                })
+        results.append({
+            "event_id": chapter.event_id,
+            "story_code": chapter.story_code,
+            "line_number": record.line_index + 1,
+            "context": "\n".join(ctx_parts),
+        })
 
     if not results:
         filter_desc = "。".join(
@@ -525,6 +688,90 @@ def search_stories_from_store(
         )
 
     return "\n".join(parts)
+
+
+def _story_search_index(store: JsonStore) -> _StorySearchIndex:
+    descriptor = _story_store_descriptor(store)
+    if descriptor is None:
+        return _build_story_search_index(store)
+    return _cached_story_search_index(descriptor)
+
+
+def _story_store_descriptor(store: JsonStore) -> tuple[str, str, int, int] | None:
+    if isinstance(store, ZipStore):
+        path = store.zip_path.resolve()
+        if not path.is_file():
+            return None
+        stat = path.stat()
+        return ("zip", str(path), stat.st_size, stat.st_mtime_ns)
+    if isinstance(store, DirectoryStore):
+        root = store.root.resolve()
+        review = root / _STORY_REVIEW_TABLE
+        if not review.is_file():
+            return None
+        stat = review.stat()
+        return ("directory", str(root), stat.st_size, stat.st_mtime_ns)
+    return None
+
+
+@lru_cache(maxsize=4)
+def _cached_story_search_index(
+    descriptor: tuple[str, str, int, int],
+) -> _StorySearchIndex:
+    kind, source, _size, _mtime_ns = descriptor
+    store: JsonStore
+    if kind == "zip":
+        store = ZipStore(source)
+    else:
+        store = DirectoryStore(source)
+    try:
+        return _build_story_search_index(store)
+    finally:
+        store.close()
+
+
+def _build_story_search_index(store: JsonStore) -> _StorySearchIndex:
+    table: dict = _load_json(store, _STORY_REVIEW_TABLE)  # type: ignore[assignment]
+    event_ids: set[str] = set()
+    chapters: list[_StorySearchChapter] = []
+    records: list[_StorySearchRecord] = []
+
+    for ev_id, entry in table.items():
+        datas = sorted(
+            entry.get("infoUnlockDatas") or [],
+            key=lambda x: x.get("storySort", 0),
+        )
+        if not datas:
+            continue
+        # Only include NONE entries that are operator memoirs
+        if entry.get("entryType", "NONE") == "NONE" and not _is_memoir_event(ev_id):
+            continue
+        event_ids.add(ev_id)
+        for d in datas:
+            story_key = d.get("storyTxt")
+            if not story_key:
+                continue
+            try:
+                chapter = read_story_from_store(store, story_key, include_narration=True)
+            except (KeyError, FileNotFoundError, json.JSONDecodeError):
+                continue
+            chapter_index = len(chapters)
+            indexed_chapter = _StorySearchChapter(
+                event_id=ev_id,
+                story_code=d.get("storyCode", ""),
+                lines=tuple(chapter.lines),
+            )
+            chapters.append(indexed_chapter)
+            records.extend(
+                _StorySearchRecord(chapter_index=chapter_index, line_index=i, line=line)
+                for i, line in enumerate(indexed_chapter.lines)
+            )
+
+    return _StorySearchIndex(
+        event_ids=frozenset(event_ids),
+        chapters=tuple(chapters),
+        records=tuple(records),
+    )
 
 
 # ---------------------------------------------------------------------------
