@@ -165,7 +165,7 @@ test("E2E", async (t) => {
   });
 
   // --- tools/list ---
-  await t.test("tools/list returns all 29 tools", async () => {
+  await t.test("tools/list returns all 30 tools", async () => {
     const tl = await mcpPost(
       origin,
       { jsonrpc: "2.0", method: "tools/list", id: 2 },
@@ -175,7 +175,7 @@ test("E2E", async (t) => {
     assert.equal(tl.status, 200);
     const tools = (tl.body?.result as Record<string, unknown>)?.tools as Array<{ name: string }> | undefined;
     assert.ok(tools, "tools/list should return tools");
-    assert.equal(tools!.length, 29, `got ${tools!.length} tools`);
+    assert.equal(tools!.length, 30, `got ${tools!.length} tools`);
 
     const expected = new Set([
       "search_prts", "read_prts_page", "list_prts_sections",

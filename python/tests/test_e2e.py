@@ -149,6 +149,7 @@ EXPECTED_TOOLS = {
     "list_story_events", "list_stories", "read_story", "read_activity",
     "list_search_scopes", "search_data", "search_stories",
     "get_event_summary", "get_story_summary",
+    "get_operator_memoirs",
 }
 
 
@@ -179,7 +180,7 @@ def test_tools_list(server: subprocess.Popen) -> None:
     tools = resp["result"]["tools"]
     names = {t["name"] for t in tools}
 
-    assert len(names) == 29, f"Expected 29 tools, got {len(names)}: {sorted(names)}"
+    assert len(names) == 30, f"Expected 30 tools, got {len(names)}: {sorted(names)}"
     for name in EXPECTED_TOOLS:
         assert name in names, f"Missing tool: {name}"
 

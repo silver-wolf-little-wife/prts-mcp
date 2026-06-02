@@ -54,6 +54,7 @@ from prts_mcp.data.story import (
     search_stories as _search_stories,
     get_event_summary as _get_event_summary,
     get_story_summary as _get_story_summary,
+    get_operator_memoirs as _get_operator_memoirs,
 )
 
 logging.basicConfig(
@@ -399,12 +400,13 @@ def search_items(
 
 @mcp.tool()
 def list_story_events(
-    category: Annotated[str | None, Field(default=None, description="可选过滤分类。\"main\" = 主线章节，\"activities\" = 活动剧情（含联动）。不填则返回全部活动。")] = None,
+    category: Annotated[str | None, Field(default=None, description="可选过滤分类。\"main\" = 主线章节，\"activities\" = 活动剧情（含联动），\"memoirs\" = 干员密录。不填则返回全部活动。")] = None,
 ) -> str:
     """列出明日方舟剧情活动列表。
 
     返回格式：每行 `- [类型] 活动ID：名称（N 章）`，类型为 MAINLINE / ACTIVITY /
-    MINI_ACTIVITY 之一。获取活动 ID 后，可调用 list_stories 查看该活动的章节列表。
+    MINI_ACTIVITY / NONE 之一。获取活动 ID 后，可调用 list_stories 查看该活动的章节列表。
+    category=\"memoirs\" 可列出所有干员密录。
     """
     from prts_mcp.config import Config
     cfg = Config.load()
@@ -645,7 +647,9 @@ def list_search_scopes() -> str:
         "- enemies：敌人图鉴（名称、威胁等级、描述、属性）。\n"
         "  使用 list_enemies / get_enemy_info / search_enemies 查询。\n"
         "- items：物品/材料（名称、描述、用途、掉落、商店关联）。\n"
-        "  使用 list_items / get_item_info / search_items 查询。"
+        "  使用 list_items / get_item_info / search_items 查询。\n"
+        "- memoirs：干员密录剧情，可通过 get_operator_memoirs 按干员名查找。\n"
+        "  获取 story_key 后使用 read_story 读取完整台词。"
     )
 
 
@@ -702,6 +706,39 @@ def search_stories(
         )
     except Exception as e:
         return f"剧情搜索失败：{e}"
+
+
+@mcp.tool()
+def get_operator_memoirs(
+    operator_name: Annotated[str, Field(description="干员的游戏内中文名，如「阿米娅」、「能天使」。")],
+) -> str:
+    """根据干员名称查询干员密录剧情。
+
+    返回干员的密录章节列表，包含章节 key（story_key）和元数据。
+    获取 story_key 后可传入 read_story 读取密录台词。
+    若需先查找正确的干员名称，可使用 search_data 搜索干员数据。
+    """
+    from prts_mcp.config import Config
+    cfg = Config.load()
+    try:
+        zip_path = _require_story_zip(cfg)
+    except RuntimeError as e:
+        return str(e)
+
+    try:
+        result = _get_operator_memoirs(zip_path, operator_name)
+    except KeyError as e:
+        return str(e)
+    except Exception as e:
+        return f"查询干员密录失败：{e}"
+
+    lines = [
+        f"# {result.operator_name}（code: {result.internal_code}，id: {result.operator_id}）",
+        f"共 {result.total_chapters} 章密录\n",
+    ]
+    for ch in result.chapters:
+        lines.append(f"- {ch.story_code} {ch.story_name}（key: {ch.story_key}）")
+    return "\n".join(lines)
 
 
 def _sync_needs_retry(status: str) -> bool:
@@ -833,6 +870,10 @@ def _run_startup_sync() -> None:
         def _sync_storyjson() -> bool:
             r = sync_release(release_spec)
             _log_sync_result(r)
+            if r.status == "updated":
+                from prts_mcp.data.story import clear_story_caches
+
+                clear_story_caches()
             return _sync_needs_retry(r.status)
 
         needs_retry = _run_initial_sync(
