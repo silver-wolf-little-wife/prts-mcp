@@ -411,10 +411,10 @@ def read_activity_from_store(
     )
 
 
-_chardict_cache: dict[str, dict[str, str]] | None = None
+_chardict_cache: dict[str, dict[str, object]] | None = None
 
 
-def _load_chardict(store: JsonStore) -> dict[str, dict[str, str]]:
+def _load_chardict(store: JsonStore) -> dict[str, dict[str, object]]:
     """Load chardict.json from the story store (cached at module level)."""
     global _chardict_cache
     if _chardict_cache is not None:

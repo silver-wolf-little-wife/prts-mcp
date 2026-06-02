@@ -326,13 +326,12 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
     except _re.error as e:
         return f"正则表达式无效：{e}"
 
+    matched: list[_StageSearchRecord] = []
     try:
-        stages = _load_stage_table()
+        records = _stage_search_records()
     except (FileNotFoundError, TypeError) as e:
         return _missing_data_message() + f"（{e}）"
-
-    matched: list[_StageSearchRecord] = []
-    for record in _stage_search_records():
+    for record in records:
         if regex.search(record.search_text):
             matched.append(record)
             if len(matched) >= max_results:

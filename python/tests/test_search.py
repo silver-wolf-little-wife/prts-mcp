@@ -243,3 +243,15 @@ class TestSearchStories:
         store = _story_store(store_kind, tmp_path)
         result = search_stories_from_store(store, ".", context_lines=6)
         assert "context_lines 必须 <= 5" in result
+
+    @pytest.mark.parametrize("store_kind", ["directory", "zip"])
+    def test_max_results_lower_bound(self, tmp_path: Path, store_kind: str) -> None:
+        store = _story_store(store_kind, tmp_path)
+        result = search_stories_from_store(store, ".", max_results=0)
+        assert "max_results 必须 >= 1" in result
+
+    @pytest.mark.parametrize("store_kind", ["directory", "zip"])
+    def test_context_lines_lower_bound(self, tmp_path: Path, store_kind: str) -> None:
+        store = _story_store(store_kind, tmp_path)
+        result = search_stories_from_store(store, ".", context_lines=-1)
+        assert "context_lines 必须 >= 0" in result

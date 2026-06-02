@@ -315,6 +315,20 @@ for (const kind of ["directory", "zip"] as const) {
     const result = searchStoriesFromStore(store, ".", undefined, undefined, 6);
     assert.match(result, /context_lines 必须 <= 5/);
   });
+
+  test(`search_stories max_results lower bound (${kind})`, () => {
+    const root = tempRoot();
+    const store = storyStore(kind, root);
+    const result = searchStoriesFromStore(store, ".", undefined, undefined, 1, 0);
+    assert.match(result, /max_results 必须 >= 1/);
+  });
+
+  test(`search_stories context_lines lower bound (${kind})`, () => {
+    const root = tempRoot();
+    const store = storyStore(kind, root);
+    const result = searchStoriesFromStore(store, ".", undefined, undefined, -1);
+    assert.match(result, /context_lines 必须 >= 0/);
+  });
 }
 
 // ---------------------------------------------------------------------------

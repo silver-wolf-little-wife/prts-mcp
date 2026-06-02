@@ -681,13 +681,13 @@ function storySearchIndex(store: JsonStore): StorySearchIndex {
 function storyStoreDescriptor(store: JsonStore): string | null {
   if (store instanceof ZipStore) {
     const stat = statSync(store.zipPath);
-    return `zip:${store.zipPath}:${stat.size}:${stat.mtimeMs}`;
+    return `zip:${store.zipPath}:${stat.size}:${String(stat.mtimeNs)}`;
   }
   if (store instanceof DirectoryStore) {
     const review = join(store.root, STORY_REVIEW_TABLE);
     try {
       const stat = statSync(review);
-      return `directory:${store.root}:${stat.size}:${stat.mtimeMs}`;
+      return `directory:${store.root}:${stat.size}:${String(stat.mtimeNs)}`;
     } catch {
       return null;
     }

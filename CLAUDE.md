@@ -22,6 +22,32 @@ PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio
 
 ---
 
+## 本机运行时环境（Windows）
+
+本仓库在当前 Windows 主机上的已验证入口：
+
+- Shell：优先使用 `C:\Program Files\PowerShell\7\pwsh.exe`，文本输出按 UTF-8 处理
+- Python：使用 `E:\Anaconda3\envs\python311\python.exe`
+- Python 本地源码导入：需要 `PYTHONPATH=F:\2026-Spring\PRTS-MCP\python\src`
+- TypeScript：使用 Volta 选中的 Node 24.14.0（项目要求 Node >=22）
+- PowerShell 下运行 npm 命令时用 `npm.cmd` / `npx.cmd`，不要直接用 `npm` / `npx`
+
+快速检查：
+
+```powershell
+.\scripts\check-runtime.ps1
+```
+
+完整验证：
+
+```powershell
+.\scripts\check-runtime.ps1 -Full
+```
+
+当前仓库内的 `python/.venv` 来自 MSYS Python 3.12，且缺少 `mcp` 运行时依赖，不作为本机验证环境使用。
+
+---
+
 ## 启动准则
 
 三条硬规则：
@@ -45,8 +71,9 @@ PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio
 2. **拉分支**：按上面的命名约定
 3. **动手**：按 commit 主题分批提交，每个中间 commit 都能独立编译（bisect-friendly）
 4. **本地验证**：
-   - Python: `cd python && python -m pytest tests/ -v`
-   - TypeScript: `cd ts && npm test && npm run typecheck`
+   - Windows 本机一键验证：`.\scripts\check-runtime.ps1 -Full`
+   - Python: `cd python && E:\Anaconda3\envs\python311\python.exe -m pytest tests -q`
+   - TypeScript: `cd ts && npm.cmd test && npm.cmd run typecheck`
    - 双实现同步改动时两边都要跑
 5. **推分支 + 开 PR**：PR body 包含 Summary / Test plan / 未尽事宜三段
 6. **独立 CR**：spawn 子代理做独立 review（见下文）
