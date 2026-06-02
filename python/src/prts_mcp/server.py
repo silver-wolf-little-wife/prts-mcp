@@ -657,7 +657,7 @@ def list_search_scopes() -> str:
 def search_data(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。例如「博士」、「法术伤害」。")],
     scope: Annotated[str, Field(default="operators", description="搜索域，目前支持 \"operators\"。")] = "operators",
-    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="最多返回条数，默认 30。")] = 30,
 ) -> str:
     """在干员数据中执行全文正则搜索。
 

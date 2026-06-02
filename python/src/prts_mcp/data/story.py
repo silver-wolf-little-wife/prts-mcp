@@ -712,6 +712,9 @@ def _build_story_search_index(store: JsonStore) -> _StorySearchIndex:
         )
         if not datas:
             continue
+        # Only include NONE entries that are operator memoirs
+        if entry.get("entryType", "NONE") == "NONE" and not _is_memoir_event(ev_id):
+            continue
         event_ids.add(ev_id)
         for d in datas:
             story_key = d.get("storyTxt")

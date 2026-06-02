@@ -10,8 +10,9 @@
  *   zh_CN/gamedata/story/{story_key}.json         — per-chapter dialogue JSON
  */
 
-import { JsonStore, ZipStore } from "./stores.js";
+import { DirectoryStore, JsonStore, ZipStore } from "./stores.js";
 import { statSync } from "node:fs";
+import { join } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Zip path constants
@@ -682,6 +683,15 @@ function storyStoreDescriptor(store: JsonStore): string | null {
     const stat = statSync(store.zipPath);
     return `zip:${store.zipPath}:${stat.size}:${stat.mtimeMs}`;
   }
+  if (store instanceof DirectoryStore) {
+    const review = join(store.root, STORY_REVIEW_TABLE);
+    try {
+      const stat = statSync(review);
+      return `directory:${store.root}:${stat.size}:${stat.mtimeMs}`;
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
 
@@ -694,6 +704,8 @@ function buildStorySearchIndex(store: JsonStore): StorySearchIndex {
   for (const [evId, entry] of Object.entries(table)) {
     const datas = (entry.infoUnlockDatas ?? []).slice();
     if (datas.length === 0) continue;
+    // Only include NONE entries that are operator memoirs
+    if ((entry.entryType ?? "NONE") === "NONE" && !isMemoirEvent(evId)) continue;
     eventIds.add(evId);
     datas.sort((a, b) => (a.storySort ?? 0) - (b.storySort ?? 0));
     for (const d of datas) {
