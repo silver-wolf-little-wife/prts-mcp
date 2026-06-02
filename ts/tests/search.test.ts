@@ -210,6 +210,17 @@ test("search_operator_data max_results", async () => {
   assert.match(result, /共 2 条/);
 });
 
+test("search_operator_data max_results cap", async () => {
+  const root = tempRoot();
+  process.env["GAMEDATA_PATH"] = root;
+  delete process.env["STORYJSON_PATH"];
+  writeMinimalGamedata(root);
+
+  const search = await loadSearchModule();
+  const result = search.searchOperatorData(".", 101);
+  assert.match(result, /max_results 必须 <= 100/);
+});
+
 // ---------------------------------------------------------------------------
 // Story search tests
 // ---------------------------------------------------------------------------
@@ -289,6 +300,20 @@ for (const kind of ["directory", "zip"] as const) {
     const store = storyStore(kind, root);
     const result = searchStoriesFromStore(store, ".", undefined, "invalid");
     assert.match(result, /无效的 line_type/);
+  });
+
+  test(`search_stories max_results cap (${kind})`, () => {
+    const root = tempRoot();
+    const store = storyStore(kind, root);
+    const result = searchStoriesFromStore(store, ".", undefined, undefined, 1, 101);
+    assert.match(result, /max_results 必须 <= 100/);
+  });
+
+  test(`search_stories context_lines cap (${kind})`, () => {
+    const root = tempRoot();
+    const store = storyStore(kind, root);
+    const result = searchStoriesFromStore(store, ".", undefined, undefined, 6);
+    assert.match(result, /context_lines 必须 <= 5/);
   });
 }
 

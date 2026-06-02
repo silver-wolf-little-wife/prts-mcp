@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -36,6 +37,13 @@ _CATEGORY_ALIASES: dict[str, str] = {
     "NONE": "NONE",
     "其他": "NONE",
 }
+
+
+@dataclass(frozen=True)
+class _ItemSearchRecord:
+    item_id: str
+    info: dict[str, Any]
+    search_text: str
 
 
 def _get_config() -> Config:
@@ -108,6 +116,7 @@ def _build_item_lookup() -> dict[str, str]:
 def clear_item_caches() -> None:
     _load_items.cache_clear()
     _build_item_lookup.cache_clear()
+    _item_search_records.cache_clear()
 
 
 def get_item_name_by_id(item_id: str) -> str | None:
@@ -280,15 +289,10 @@ def search_items(pattern: str, max_results: int = 30) -> str:
     except (FileNotFoundError, RuntimeError, TypeError) as exc:
         return _missing_data_message() + f"（{exc}）"
 
-    results: list[tuple[str, dict[str, Any]]] = []
-    for item_id, info in sorted(entries, key=lambda kv: (kv[1].get("sortId", 999999), kv[0])):
-        search_text = " ".join(
-            str(info.get(field) or "")
-            for field in ("name", "description", "usage", "obtainApproach", "classifyType", "itemType")
-        )
-        search_text += f" {item_id}"
-        if regex.search(search_text):
-            results.append((item_id, info))
+    results: list[_ItemSearchRecord] = []
+    for record in _item_search_records():
+        if regex.search(record.search_text):
+            results.append(record)
             if len(results) >= max_results:
                 break
 
@@ -296,7 +300,9 @@ def search_items(pattern: str, max_results: int = 30) -> str:
         return f"未找到匹配 '{pattern}' 的物品。"
 
     lines = [f"# 搜索结果：{pattern}（共 {len(results)} 个）"]
-    for item_id, info in results:
+    for record in results:
+        item_id = record.item_id
+        info = record.info
         item_name = info.get("name") or "（无名）"
         classify = _classify_label(str(info.get("classifyType") or ""))
         item_type = info.get("itemType") or "-"
@@ -309,3 +315,20 @@ def search_items(pattern: str, max_results: int = 30) -> str:
         if obtain:
             lines.append(f"- **获取方式**：{obtain}")
     return "\n".join(lines)
+
+
+@lru_cache(maxsize=1)
+def _item_search_records() -> tuple[_ItemSearchRecord, ...]:
+    records: list[_ItemSearchRecord] = []
+    entries = sorted(_visible_items(), key=lambda kv: (kv[1].get("sortId", 999999), kv[0]))
+    for item_id, info in entries:
+        search_text = " ".join(
+            str(info.get(field) or "")
+            for field in ("name", "description", "usage", "obtainApproach", "classifyType", "itemType")
+        )
+        records.append(_ItemSearchRecord(
+            item_id=item_id,
+            info=info,
+            search_text=f"{search_text} {item_id}",
+        ))
+    return tuple(records)

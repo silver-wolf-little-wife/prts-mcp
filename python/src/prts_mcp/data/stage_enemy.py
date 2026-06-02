@@ -43,6 +43,7 @@ def clear_stage_enemy_caches() -> None:
     _load_enemy_handbook.cache_clear()
     _load_enemy_database.cache_clear()
     _build_enemy_name_to_id.cache_clear()
+    _enemy_appearance_index.cache_clear()
 
 
 @lru_cache(maxsize=1)
@@ -253,10 +254,14 @@ def get_stage_enemies(stage_id: str) -> str:
 
 
 def _find_enemy_appearances(enemy_id: str) -> list[tuple[str, int]]:
-    appearances: list[tuple[str, int]] = []
-    stages = _load_stage_table()
+    return _enemy_appearance_index().get(enemy_id, [])
+
+
+@lru_cache(maxsize=1)
+def _enemy_appearance_index() -> dict[str, list[tuple[str, int]]]:
+    appearances: dict[str, list[tuple[str, int]]] = {}
     store = _levels_store()
-    for stage_id, stage in stages.items():
+    for stage_id, stage in _load_stage_table().items():
         level_id = stage.get("levelId")
         if not level_id:
             continue
@@ -266,9 +271,8 @@ def _find_enemy_appearances(enemy_id: str) -> list[tuple[str, int]]:
         level = store.read_json(path)
         if not isinstance(level, dict):
             continue
-        count = _spawn_counts(level).get(enemy_id)
-        if count:
-            appearances.append((stage_id, count))
+        for enemy_id, count in _spawn_counts(level).items():
+            appearances.setdefault(enemy_id, []).append((stage_id, count))
     return appearances
 
 

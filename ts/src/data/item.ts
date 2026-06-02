@@ -64,12 +64,20 @@ interface ItemTable {
   items?: Record<string, ItemEntry>;
 }
 
+interface ItemSearchRecord {
+  itemId: string;
+  info: ItemEntry;
+  searchText: string;
+}
+
 let itemTable: Record<string, ItemEntry> | null = null;
 let itemLookup: Map<string, string> | null = null;
+let itemSearchRecords: ItemSearchRecord[] | null = null;
 
 export function clearItemCaches(): void {
   itemTable = null;
   itemLookup = null;
+  itemSearchRecords = null;
 }
 
 function itemStore(): DirectoryStore {
@@ -282,31 +290,17 @@ export function searchItems(pattern: string, maxResults = 30): string {
     return `正则表达式无效：${err instanceof Error ? err.message : String(err)}`;
   }
 
-  let entries: Array<[string, ItemEntry]>;
+  let records: ItemSearchRecord[];
   try {
-    entries = visibleItems();
+    records = getItemSearchRecords();
   } catch (err) {
     return missingDataMessage() + `（${err instanceof Error ? err.message : String(err)}）`;
   }
 
-  const results: Array<[string, ItemEntry]> = [];
-  entries.sort((a, b) => {
-    const sa = a[1].sortId ?? 999999;
-    const sb = b[1].sortId ?? 999999;
-    return sa !== sb ? sa - sb : a[0].localeCompare(b[0]);
-  });
-  for (const [itemId, info] of entries) {
-    const searchText = [
-      info.name,
-      info.description,
-      info.usage,
-      info.obtainApproach,
-      info.classifyType,
-      info.itemType,
-      itemId,
-    ].filter(Boolean).join(" ");
-    if (regex.test(searchText)) {
-      results.push([itemId, info]);
+  const results: ItemSearchRecord[] = [];
+  for (const record of records) {
+    if (regex.test(record.searchText)) {
+      results.push(record);
       if (results.length >= maxResults) break;
     }
   }
@@ -314,7 +308,9 @@ export function searchItems(pattern: string, maxResults = 30): string {
   if (results.length === 0) return `未找到匹配 '${pattern}' 的物品。`;
 
   const lines = [`# 搜索结果：${pattern}（共 ${results.length} 个）`];
-  for (const [itemId, info] of results) {
+  for (const record of results) {
+    const itemId = record.itemId;
+    const info = record.info;
     const itemName = info.name || "（无名）";
     const classify = classifyLabel(info.classifyType ?? "");
     const itemType = info.itemType ?? "-";
@@ -325,4 +321,28 @@ export function searchItems(pattern: string, maxResults = 30): string {
     if (info.obtainApproach) lines.push(`- **获取方式**：${info.obtainApproach}`);
   }
   return lines.join("\n");
+}
+
+function getItemSearchRecords(): ItemSearchRecord[] {
+  if (itemSearchRecords !== null) return itemSearchRecords;
+  const entries = visibleItems();
+  entries.sort((a, b) => {
+    const sa = a[1].sortId ?? 999999;
+    const sb = b[1].sortId ?? 999999;
+    return sa !== sb ? sa - sb : a[0].localeCompare(b[0]);
+  });
+  itemSearchRecords = entries.map(([itemId, info]) => ({
+    itemId,
+    info,
+    searchText: [
+      info.name,
+      info.description,
+      info.usage,
+      info.obtainApproach,
+      info.classifyType,
+      info.itemType,
+      itemId,
+    ].filter(Boolean).join(" "),
+  }));
+  return itemSearchRecords;
 }

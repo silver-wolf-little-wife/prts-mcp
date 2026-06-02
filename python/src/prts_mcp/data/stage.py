@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re as _re
+from dataclasses import dataclass as _dataclass
 from functools import lru_cache as _lru_cache
 
 from prts_mcp.config import Config as _Config
@@ -30,6 +31,13 @@ _DIFFICULTY_LABELS: dict[str, str] = {
     "FOUR_STAR": "突袭",
     "SIX_STAR": "六星",
 }
+
+
+@_dataclass(frozen=True)
+class _StageSearchRecord:
+    stage_id: str
+    entry: dict
+    search_text: str
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -164,6 +172,7 @@ def _zone_display(zone_id: str) -> str:
 def clear_stage_caches() -> None:
     _load_stage_table.cache_clear()
     _load_zone_table.cache_clear()
+    _stage_search_records.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -322,19 +331,10 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
     except (FileNotFoundError, TypeError) as e:
         return _missing_data_message() + f"（{e}）"
 
-    matched: list[dict] = []
-    for sid, entry in sorted(stages.items()):
-        search_text = (
-            (entry.get("name") or "")
-            + " "
-            + (entry.get("code") or "")
-            + " "
-            + _clean_description(entry.get("description") or "")
-            + " "
-            + (entry.get("stageType") or "")
-        )
-        if regex.search(search_text):
-            matched.append(entry)
+    matched: list[_StageSearchRecord] = []
+    for record in _stage_search_records():
+        if regex.search(record.search_text):
+            matched.append(record)
             if len(matched) >= max_results:
                 break
 
@@ -342,7 +342,8 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
         return f"未找到匹配 '{pattern}' 的关卡。"
 
     lines = [f"# 搜索结果：{pattern}（共 {len(matched)} 个）"]
-    for e in matched:
+    for record in matched:
+        e = record.entry
         name = e.get("name") or "（无名）"
         code = e.get("code") or "?"
         t_label = _stage_type_label(e.get("stageType", ""))
@@ -353,7 +354,7 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
         raw_desc = e.get("description") or ""
         cdesc = _clean_description(raw_desc)
 
-        sid = e.get("stageId", "")
+        sid = record.stage_id
         lines.append(f"\n## {name} [{t_label}] {code}（id: {sid}）")
         lines.append(f"- **区域**：{zd}")
         lines.append(f"- **难度**：{d_label}")
@@ -362,3 +363,22 @@ def search_stages(pattern: str, max_results: int = 30) -> str:
             lines.append(f"- **描述**：{cdesc[:120]}{'...' if len(cdesc) > 120 else ''}")
 
     return "\n".join(lines)
+
+
+@_lru_cache(maxsize=1)
+def _stage_search_records() -> tuple[_StageSearchRecord, ...]:
+    records: list[_StageSearchRecord] = []
+    for sid, entry in sorted(_load_stage_table().items()):
+        search_text = " ".join([
+            entry.get("name") or "",
+            entry.get("code") or "",
+            _clean_description(entry.get("description") or ""),
+            entry.get("stageType") or "",
+            sid,
+        ])
+        records.append(_StageSearchRecord(
+            stage_id=sid,
+            entry=entry,
+            search_text=search_text,
+        ))
+    return tuple(records)

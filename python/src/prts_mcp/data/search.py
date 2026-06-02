@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
+from functools import lru_cache
 
 from prts_mcp.config import Config
 from prts_mcp.data.operator import (
@@ -14,11 +16,29 @@ from prts_mcp.data.operator import (
 from prts_mcp.utils.sanitizer import strip_wikitext
 
 
+@dataclass(frozen=True)
+class _OperatorSearchRecord:
+    operator: str
+    category: str
+    field: str
+    text: str
+
+
+def clear_search_caches() -> None:
+    """Clear cached cross-table search records."""
+    _operator_search_records.cache_clear()
+
+
 def search_operator_data(pattern: str, max_results: int = 30) -> str:
     """Search operator names, archive texts, and voice lines by regex.
 
     Case-insensitive.  Returns a formatted multi-block string.
     """
+    if max_results < 1:
+        return "max_results 必须 >= 1。"
+    if max_results > 100:
+        return "max_results 必须 <= 100。"
+
     config = Config.load()
     if not config.has_operator_data:
         return (
@@ -33,83 +53,12 @@ def search_operator_data(pattern: str, max_results: int = 30) -> str:
     except re.error as exc:
         return f"正则表达式无效：{exc}"
 
-    ct = _load_character_table()
-    handbook = _load_handbook_table().get("handbookDict", {})
-    charwords = _load_charword_table().get("charWords", {})
-    name_to_id = _build_name_to_id()
-
-    # Build charId → voice entries index once to avoid O(n×m) nested loops
-    charid_to_voices: dict[str, list[dict]] = {}
-    for entry in charwords.values():
-        cid = entry.get("charId")
-        if cid and entry.get("voiceText"):
-            charid_to_voices.setdefault(cid, []).append(entry)
-
-    results: list[dict] = []
-
-    for name, char_id in name_to_id.items():
-        if len(results) >= max_results:
-            break
-        info = ct.get(char_id)
-        if info is None:
-            continue
-
-        # --- basic: operator name ---
-        if regex.search(name):
-            results.append({
-                "operator": name,
-                "category": "basic",
-                "field": "干员名称",
-                "text": name,
-            })
+    results: list[_OperatorSearchRecord] = []
+    for record in _operator_search_records():
+        if regex.search(record.text):
+            results.append(record)
             if len(results) >= max_results:
                 break
-
-        # --- basic: description ---
-        desc = info.get("description") or ""
-        if desc:
-            cleaned = strip_wikitext(desc)
-            if regex.search(cleaned):
-                results.append({
-                    "operator": name,
-                    "category": "basic",
-                    "field": "攻击属性",
-                    "text": cleaned,
-                })
-                if len(results) >= max_results:
-                    break
-
-        # --- archives ---
-        hb_entry = handbook.get(char_id)
-        if hb_entry:
-            for story in hb_entry.get("storyTextAudio", []):
-                if len(results) >= max_results:
-                    break
-                title = story.get("storyTitle", "")
-                for s in story.get("stories", []):
-                    if len(results) >= max_results:
-                        break
-                    text = s.get("storyText", "")
-                    if text and regex.search(text):
-                        results.append({
-                            "operator": name,
-                            "category": "archives",
-                            "field": title,
-                            "text": text,
-                        })
-
-        # --- voicelines ---
-        if char_id in charid_to_voices:
-            for v in charid_to_voices[char_id]:
-                if len(results) >= max_results:
-                    break
-                if regex.search(v["voiceText"]):
-                    results.append({
-                        "operator": name,
-                        "category": "voicelines",
-                        "field": v.get("voiceTitle", "未知"),
-                        "text": v["voiceText"],
-                    })
 
     if not results:
         return f"未找到匹配 '{pattern}' 的干员数据。"
@@ -118,9 +67,69 @@ def search_operator_data(pattern: str, max_results: int = 30) -> str:
     for r in results:
         blocks.append(
             f"\n---\n\n"
-            f"[operators/{r['category']}/{r['operator']}]\n"
-            f"匹配：{r['field']}\n"
-            f"{r['text']}"
+            f"[operators/{r.category}/{r.operator}]\n"
+            f"匹配：{r.field}\n"
+            f"{r.text}"
         )
 
     return "".join(blocks)
+
+
+@lru_cache(maxsize=1)
+def _operator_search_records() -> tuple[_OperatorSearchRecord, ...]:
+    ct = _load_character_table()
+    handbook = _load_handbook_table().get("handbookDict", {})
+    charwords = _load_charword_table().get("charWords", {})
+    name_to_id = _build_name_to_id()
+
+    charid_to_voices: dict[str, list[dict]] = {}
+    for entry in charwords.values():
+        cid = entry.get("charId")
+        if cid and entry.get("voiceText"):
+            charid_to_voices.setdefault(cid, []).append(entry)
+
+    records: list[_OperatorSearchRecord] = []
+    for name, char_id in name_to_id.items():
+        info = ct.get(char_id)
+        if info is None:
+            continue
+
+        records.append(_OperatorSearchRecord(
+            operator=name,
+            category="basic",
+            field="干员名称",
+            text=name,
+        ))
+
+        desc = info.get("description") or ""
+        if desc:
+            records.append(_OperatorSearchRecord(
+                operator=name,
+                category="basic",
+                field="攻击属性",
+                text=strip_wikitext(desc),
+            ))
+
+        hb_entry = handbook.get(char_id)
+        if hb_entry:
+            for story in hb_entry.get("storyTextAudio", []):
+                title = story.get("storyTitle", "")
+                for s in story.get("stories", []):
+                    text = s.get("storyText", "")
+                    if text:
+                        records.append(_OperatorSearchRecord(
+                            operator=name,
+                            category="archives",
+                            field=title,
+                            text=text,
+                        ))
+
+        for v in charid_to_voices.get(char_id, []):
+            records.append(_OperatorSearchRecord(
+                operator=name,
+                category="voicelines",
+                field=v.get("voiceTitle", "未知"),
+                text=v["voiceText"],
+            ))
+
+    return tuple(records)

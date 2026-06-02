@@ -155,6 +155,10 @@ class TestSearchOperatorData:
         result = search_operator_data(".", max_results=2)
         assert "共 2 条" in result
 
+    def test_max_results_cap(self) -> None:
+        result = search_operator_data(".", max_results=101)
+        assert "max_results 必须 <= 100" in result
+
 
 # ---------------------------------------------------------------------------
 # Story search tests
@@ -227,3 +231,15 @@ class TestSearchStories:
         store = _story_store(store_kind, tmp_path)
         result = search_stories_from_store(store, ".", line_type="invalid")
         assert "无效的 line_type" in result
+
+    @pytest.mark.parametrize("store_kind", ["directory", "zip"])
+    def test_max_results_cap(self, tmp_path: Path, store_kind: str) -> None:
+        store = _story_store(store_kind, tmp_path)
+        result = search_stories_from_store(store, ".", max_results=101)
+        assert "max_results 必须 <= 100" in result
+
+    @pytest.mark.parametrize("store_kind", ["directory", "zip"])
+    def test_context_lines_cap(self, tmp_path: Path, store_kind: str) -> None:
+        store = _story_store(store_kind, tmp_path)
+        result = search_stories_from_store(store, ".", context_lines=6)
+        assert "context_lines 必须 <= 5" in result
