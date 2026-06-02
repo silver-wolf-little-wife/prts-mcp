@@ -287,7 +287,7 @@ def get_enemy_info(
 @mcp.tool()
 def search_enemies(
     pattern: Annotated[str, Field(description="正则表达式模式，如 '萨卡兹|骑士'。")],
-    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="返回结果数量上限，默认 30。")] = 30,
 ) -> str:
     """在敌人图鉴中进行全文正则搜索。
 
@@ -352,7 +352,7 @@ def get_stage_info(
 @mcp.tool()
 def search_stages(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。例如 'H10'、'切尔诺伯格'。")],
-    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="最多返回条数，默认 30。")] = 30,
 ) -> str:
     """在关卡数据库中执行全文正则搜索。
 
@@ -389,7 +389,7 @@ def get_item_info(
 @mcp.tool()
 def search_items(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，如「源岩|装置」。")],
-    max_results: Annotated[int, Field(default=30, description="返回结果数量上限，默认 30。")] = 30,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="返回结果数量上限，默认 30。")] = 30,
 ) -> str:
     """在物品/材料数据中进行全文正则搜索。
 
@@ -677,8 +677,8 @@ def search_stories(
     pattern: Annotated[str, Field(description="正则表达式搜索模式，大小写不敏感。")],
     character: Annotated[str | None, Field(default=None, description="按说话角色名过滤（仅匹配 dialog 行），如「博士」、「阿米娅」。")] = None,
     line_type: Annotated[str | None, Field(default=None, description="台词类型过滤：dialog（对话）、narration（旁白）、choice（选项）。")] = None,
-    context_lines: Annotated[int, Field(default=1, description="匹配行前后的上下文行数，默认 1。设 0 则只返回匹配行本身。")] = 1,
-    max_results: Annotated[int, Field(default=30, description="最多返回条数，默认 30。")] = 30,
+    context_lines: Annotated[int, Field(default=1, ge=0, le=5, description="匹配行前后的上下文行数，默认 1。设 0 则只返回匹配行本身。")] = 1,
+    max_results: Annotated[int, Field(default=30, ge=1, le=100, description="最多返回条数，默认 30。")] = 30,
     event_id: Annotated[str | None, Field(default=None, description="限定活动 ID，如「act31side」。不填则搜索全部活动。")] = None,
 ) -> str:
     """在剧情台词中执行全文正则搜索，支持角色和台词类型过滤。

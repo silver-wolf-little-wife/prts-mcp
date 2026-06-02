@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Operator memoir discovery.** New `get_operator_memoirs(operator_name)` tool
   resolves operator Chinese name to memoir story keys via `chardict.json`,
   enabling LLM agents to find and read operator memoir (干员密录) dialogue.
+- This new tool is treated as a one-off patch-line exception because it exposes
+  story data that already existed in the synced StoryJson archive but was not
+  discoverable through the public tool surface.
 - `list_story_events(category="memoirs")` now exposes 372 previously hidden
   operator memoir events.
 - Operator memoir dialogue is now indexed by `search_stories`.

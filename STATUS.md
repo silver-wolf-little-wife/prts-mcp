@@ -1,16 +1,16 @@
 # PRTS-MCP 项目状态
 
-_Last updated: 2026-05-28_
+_Last updated: 2026-06-03_
 
 ## 当前版本
 
 | 实现 | 版本 | 状态 |
 |------|------|------|
-| Python | 1.6.0 | release candidate |
-| TypeScript | 1.6.0 | release candidate |
+| Python | 1.6.1 | release candidate |
+| TypeScript | 1.6.1 | release candidate |
 
-- 当前发版候选：29 个 MCP 工具（1.6.0，新增关卡敌人融合与物品/材料域）
-- 当前稳定发布：24 个 MCP 工具（1.5.0）
+- 当前发版候选：30 个 MCP 工具（1.6.1，新增干员密录发现与搜索缓存优化）
+- 当前稳定发布：29 个 MCP 工具（1.6.0）
 - 兼容性合约：1.x 期间既有工具名和必填参数不变；minor 版本允许新增工具和可选参数
 
 ## 仓库结构
@@ -90,6 +90,7 @@ PRTS-MCP/
 | 27 | `list_items` | GameData | 1.6.0 |
 | 28 | `get_item_info` | GameData | 1.6.0 |
 | 29 | `search_items` | GameData | 1.6.0 |
+| 30 | `get_operator_memoirs` | StoryJson | 1.6.1 |
 
 ## 遗留 TODO
 
@@ -100,6 +101,7 @@ PRTS-MCP/
 
 | 版本 | 日期 | 亮点 |
 |------|------|------|
+| 1.6.1 | 2026-06-03 | 干员密录发现 + 搜索缓存优化（30 工具） |
 | 1.6.0 | 2026-05-28 | 关卡敌人融合 + 物品/材料域（29 工具） |
 | 1.5.0 | 2026-05-25 | 关卡数据域：list_stages、get_stage_info、search_stages（24 工具） |
 | 1.4.2 | 2026-05-25 | 修复 Streamable HTTP session pool 400 错误 |

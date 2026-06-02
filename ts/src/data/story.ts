@@ -164,7 +164,7 @@ interface CharDictEntry {
   id?: string;
 }
 
-let charDictCache: Record<string, CharDictEntry> | null = null;
+let charDictCache: { descriptor: string; data: Record<string, CharDictEntry> } | null = null;
 
 export function clearStoryCaches(): void {
   storySearchCache = null;
@@ -436,17 +436,21 @@ export function readActivityFromStore(
 // ---------------------------------------------------------------------------
 
 function loadCharDict(store: JsonStore): Record<string, CharDictEntry> {
-  if (charDictCache) return charDictCache;
+  const descriptor = charDictStoreDescriptor(store);
+  if (descriptor !== null && charDictCache?.descriptor === descriptor) {
+    return charDictCache.data;
+  }
   if (!store.exists(CHARDICT)) {
-    charDictCache = {};
-    return charDictCache;
+    return {};
   }
+  let data: Record<string, CharDictEntry>;
   try {
-    charDictCache = store.readJson<Record<string, CharDictEntry>>(CHARDICT);
+    data = store.readJson<Record<string, CharDictEntry>>(CHARDICT);
   } catch {
-    charDictCache = {};
+    data = {};
   }
-  return charDictCache ?? {};
+  if (descriptor !== null) charDictCache = { descriptor, data };
+  return data;
 }
 
 function resolveOperatorCode(
@@ -680,14 +684,35 @@ function storySearchIndex(store: JsonStore): StorySearchIndex {
 
 function storyStoreDescriptor(store: JsonStore): string | null {
   if (store instanceof ZipStore) {
-    const stat = statSync(store.zipPath);
-    return `zip:${store.zipPath}:${stat.size}:${String(stat.mtimeNs)}`;
+    const stat = statSync(store.zipPath, { bigint: true });
+    return `zip:${store.zipPath}:${stat.size}:${stat.mtimeNs}`;
   }
   if (store instanceof DirectoryStore) {
     const review = join(store.root, STORY_REVIEW_TABLE);
     try {
-      const stat = statSync(review);
-      return `directory:${store.root}:${stat.size}:${String(stat.mtimeNs)}`;
+      const stat = statSync(review, { bigint: true });
+      return `directory:${store.root}:${stat.size}:${stat.mtimeNs}`;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function charDictStoreDescriptor(store: JsonStore): string | null {
+  if (store instanceof ZipStore) {
+    try {
+      const stat = statSync(store.zipPath, { bigint: true });
+      return `zip:${store.zipPath}:${stat.size}:${stat.mtimeNs}:chardict`;
+    } catch {
+      return null;
+    }
+  }
+  if (store instanceof DirectoryStore) {
+    const chardict = join(store.root, CHARDICT);
+    try {
+      const stat = statSync(chardict, { bigint: true });
+      return `directory:${store.root}:${stat.size}:${stat.mtimeNs}:chardict`;
     } catch {
       return null;
     }

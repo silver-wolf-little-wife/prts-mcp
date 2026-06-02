@@ -284,13 +284,12 @@ def search_items(pattern: str, max_results: int = 30) -> str:
     except re.error as exc:
         return f"正则表达式无效：{exc}"
 
+    results: list[_ItemSearchRecord] = []
     try:
-        entries = _visible_items()
+        records = _item_search_records()
     except (FileNotFoundError, RuntimeError, TypeError) as exc:
         return _missing_data_message() + f"（{exc}）"
-
-    results: list[_ItemSearchRecord] = []
-    for record in _item_search_records():
+    for record in records:
         if regex.search(record.search_text):
             results.append(record)
             if len(results) >= max_results:

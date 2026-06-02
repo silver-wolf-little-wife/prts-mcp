@@ -144,9 +144,8 @@ class _StorySearchIndex:
 
 def clear_story_caches() -> None:
     """Clear cached story search indexes after story data changes."""
-    global _chardict_cache
     _cached_story_search_index.cache_clear()
-    _chardict_cache = None
+    _cached_chardict.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -411,27 +410,59 @@ def read_activity_from_store(
     )
 
 
-_chardict_cache: dict[str, dict[str, object]] | None = None
-
-
 def _load_chardict(store: JsonStore) -> dict[str, dict[str, object]]:
-    """Load chardict.json from the story store (cached at module level)."""
-    global _chardict_cache
-    if _chardict_cache is not None:
-        return _chardict_cache
+    """Load chardict.json from the story store."""
+    descriptor = _chardict_store_descriptor(store)
+    if descriptor is not None:
+        return _cached_chardict(descriptor)
     if not store.exists(_CHARDICT):
-        _chardict_cache = {}
-        return _chardict_cache
+        return {}
+    return _read_chardict_from_store(store)
+
+
+def _read_chardict_from_store(store: JsonStore) -> dict[str, dict[str, object]]:
     try:
         data: dict = _load_json(store, _CHARDICT)  # type: ignore[assignment]
-        _chardict_cache = {str(k): v for k, v in data.items() if isinstance(v, dict)}
+        return {str(k): v for k, v in data.items() if isinstance(v, dict)}
     except (KeyError, FileNotFoundError, json.JSONDecodeError):
-        _chardict_cache = {}
-    return _chardict_cache
+        return {}
+
+
+def _chardict_store_descriptor(store: JsonStore) -> tuple[str, str, int, int] | None:
+    if isinstance(store, ZipStore):
+        path = store.zip_path.resolve()
+        if not path.is_file():
+            return None
+        stat = path.stat()
+        return ("zip", str(path), stat.st_size, stat.st_mtime_ns)
+    if isinstance(store, DirectoryStore):
+        root = store.root.resolve()
+        chardict = root / _CHARDICT
+        if not chardict.is_file():
+            return None
+        stat = chardict.stat()
+        return ("directory", str(root), stat.st_size, stat.st_mtime_ns)
+    return None
+
+
+@lru_cache(maxsize=4)
+def _cached_chardict(
+    descriptor: tuple[str, str, int, int],
+) -> dict[str, dict[str, object]]:
+    kind, source, _size, _mtime_ns = descriptor
+    store: JsonStore
+    if kind == "zip":
+        store = ZipStore(source)
+    else:
+        store = DirectoryStore(source)
+    try:
+        return _read_chardict_from_store(store)
+    finally:
+        store.close()
 
 
 def _resolve_operator_code(
-    chardict: dict[str, dict[str, str]],
+    chardict: dict[str, dict[str, object]],
     operator_name: str,
 ) -> str | None:
     """Reverse lookup: operator display name -> internal code (e.g. '能天使' -> 'angel')."""

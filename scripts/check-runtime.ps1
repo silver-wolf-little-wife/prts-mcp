@@ -165,4 +165,3 @@ Write-Host "Runtime check complete: $Failures failure(s), $Warnings warning(s)."
 if ($Failures -gt 0) {
     exit 1
 }
-

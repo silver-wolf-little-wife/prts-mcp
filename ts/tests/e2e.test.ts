@@ -188,6 +188,7 @@ test("E2E", async (t) => {
       "list_story_events", "list_stories", "read_story", "read_activity",
       "list_search_scopes", "search_data", "search_stories",
       "get_event_summary", "get_story_summary",
+      "get_operator_memoirs",
     ]);
     const names = new Set(tools!.map((t) => t.name));
     for (const name of expected) {
