@@ -16,8 +16,8 @@ services:
       - prts-mcp-storyjson:/data/storyjson
     environment:
       - PORT=3000
-      # 国内服务器建议启用 GitHub 镜像加速
-      - GITHUB_MIRRORS=https://ghproxy.net
+      # 国内服务器建议启用 GitHub 镜像加速（逗号分隔，逐个尝试）
+      - GITHUB_MIRRORS=https://mirror.ghproxy.com,https://ghproxy.net,https://gh-proxy.com
       # 可选：GitHub Token 提升 API 限额
       # - GITHUB_TOKEN=ghp_xxx
       # 可选：自定义数据路径（设置后禁用自动同步）
