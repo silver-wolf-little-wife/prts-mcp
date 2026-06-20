@@ -1,11 +1,8 @@
----
-project: "PRTS-MCP"
-branch: "main"
----
+# CLAUDE.md
 
-# CLAUDE.md — AI 协作者说明
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio）和 TypeScript（Streamable HTTP）两套独立实现。 本文件记录**每次会话必读**的工作流。
+PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio）和 TypeScript（Streamable HTTP）两套独立实现。本文件记录**每次会话必读**的工作流。
 
 ## 相关文档
 
@@ -45,6 +42,16 @@ PRTS-MCP 是面向明日方舟同人创作的 MCP Server，包含 Python（stdio
 ```
 
 当前仓库内的 `python/.venv` 来自 MSYS Python 3.12，且缺少 `mcp` 运行时依赖，不作为本机验证环境使用。
+
+> **注意**：以上 Python 路径和 `PYTHONPATH` 为本机特定配置，其他协作者需按自身环境替换。
+
+### Docker Compose（TS 实现）
+
+```powershell
+docker compose -f docker-compose.yml up -d
+```
+
+服务默认监听 `http://localhost:3000/mcp`。镜像源通过 `GITHUB_MIRRORS` 环境变量配置（逗号分隔，逐个尝试）。
 
 ---
 
@@ -162,12 +169,11 @@ git push origin python/v1.3.1 ts/v1.3.1
 - 新工具建议先在一个实现中完成，验证后再移植到另一个
 - 两套实现各有独立的 CHANGELOG，版本号尽量同步
 
-## 已知陷阱
+## 已知陷阱（高频踩坑）
 
-- PRTS Wiki `action=query&prop=extracts` 会丢失模板渲染内容，必须用 `action=parse&prop=text`
-- MediaWiki 搜索默认扫描所有 namespace，需加 `srnamespace=0`
-- PRTS 的 `/spine`、`/data` 等技术页面在主命名空间，需客户端过滤
-- story_review_table.json 顶层直接是 `{event_id: entry}`，不是嵌套在某个 key 下
+- PRTS Wiki `action=query&prop=extracts` 丢失模板渲染内容，**必须**用 `action=parse&prop=text`
+- `story_review_table.json` 顶层直接是 `{event_id: entry}`，不是嵌套在某个 key 下
 - ArknightsStoryJson zip 内所有路径以 `zh_CN/` 为前缀
 - `GITHUB_MIRRORS` 配置的代理 URL 不要带尾部斜杠
-- Python 的 `httpx` 和 TS 的 `fetch` 行为不完全一致（重试、超时），sync 逻辑不要假设相同
+
+完整陷阱清单（API 细节、数据格式、网络同步）见 [`docs/dev/STYLE.md`](docs/dev/STYLE.md) 的「已知陷阱」章节。
