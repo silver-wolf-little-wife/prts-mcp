@@ -20,6 +20,8 @@ services:
       - GITHUB_MIRRORS=https://edgeone.gh-proxy.com,https://hk.gh-proxy.com,https://gh-proxy.com,https://gh.llkk.cc
       # 可选：GitHub Token 提升 API 限额
       # - GITHUB_TOKEN=ghp_xxx
+      # 可选：下载超时秒数（默认 300，镜像慢时可调大）
+      # - SYNC_TIMEOUT_SECONDS=600
       # 可选：自定义数据路径（设置后禁用自动同步）
       # - GAMEDATA_PATH=/custom/path
       # - STORYJSON_PATH=/custom/story.zip
