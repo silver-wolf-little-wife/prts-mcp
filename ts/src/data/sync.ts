@@ -40,6 +40,16 @@ const GITHUB_UA = "PRTS-MCP-Bot/0.1 (Arknights fan-creation helper)";
 /** Skip the upstream SHA check if cached data is fresher than this (seconds). */
 const CACHE_TTL_SECONDS = 3600;
 
+/** Default download timeout when SYNC_TIMEOUT_SECONDS is not set (5 min). */
+const DEFAULT_SYNC_TIMEOUT_MS = 300_000;
+
+function getSyncTimeoutMs(): number {
+  const raw = process.env["SYNC_TIMEOUT_SECONDS"];
+  if (raw === undefined) return DEFAULT_SYNC_TIMEOUT_MS;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n * 1000 : DEFAULT_SYNC_TIMEOUT_MS;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -448,7 +458,7 @@ export async function downloadReleaseAsset(
   spec: ReleaseSpec,
   tag: string,
   assetUrl: string,
-  timeoutMs = 120_000
+  timeoutMs = getSyncTimeoutMs()
 ): Promise<void> {
   const tmp = spec.localZip + ".tmp";
   await mkdir(dirname(spec.localZip), { recursive: true });
